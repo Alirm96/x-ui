@@ -194,7 +194,11 @@ dev_install_xray() {
         unzip -q Xray-linux-64.zip
         rm Xray-linux-64.zip
         chmod +x xray
+        # Create symlinks for all supported architectures
         ln -sf xray xray-linux-amd64
+        ln -sf xray xray-linux-arm64
+        ln -sf xray xray-linux-arm
+        ln -sf xray xray-linux-i386
     '
     
     log_success "Xray installed successfully"

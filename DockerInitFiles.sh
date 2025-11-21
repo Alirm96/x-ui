@@ -27,6 +27,11 @@ wget -q "https://github.com/XTLS/Xray-core/releases/download/v25.9.11/Xray-linux
 unzip "Xray-linux-${ARCH}.zip"
 rm -f "Xray-linux-${ARCH}.zip" geoip.dat geosite.dat LICENSE README.md
 mv xray "xray-linux-${FNAME}"
+# Create symlinks for all supported architectures
+ln -sf xray xray-linux-amd64
+ln -sf xray xray-linux-arm64
+ln -sf xray xray-linux-arm
+ln -sf xray xray-linux-i386
 wget -q "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 wget -q "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 wget -q -O geoip_IR.dat https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat

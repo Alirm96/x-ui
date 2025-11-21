@@ -179,6 +179,11 @@ install_x-ui() {
     if [[ $(arch) == "armv7" ]]; then
         mv bin/xray-linux-$(arch) bin/xray-linux-arm
         chmod +x bin/xray-linux-arm
+        # Create symlinks for all supported architectures
+        ln -sf xray bin/xray-linux-amd64
+        ln -sf xray bin/xray-linux-arm64
+        ln -sf xray bin/xray-linux-arm
+        ln -sf xray bin/xray-linux-i386
     fi
     chmod +x x-ui bin/xray-linux-$(arch)
     cp -f x-ui.service /etc/systemd/system/

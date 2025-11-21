@@ -706,7 +706,18 @@ func (s *OutboundService) measureLatency(outbound *model.Outbound, testURL strin
 	defer os.Remove(configFile)
 	
 	// Start temporary xray process
-	xrayBin := "/app/bin/xray-linux-amd64"
+	// Select correct xray binary for current architecture
+	archMap := map[string]string{
+		"amd64": "amd64",
+		"386": "i386",
+		"arm64": "arm64",
+		"arm": "arm",
+	}
+	arch, ok := archMap[runtime.GOARCH]
+	if !ok {
+		arch = "amd64"
+	}
+	xrayBin := "/app/bin/xray-linux-" + arch
 	cmd := exec.Command(xrayBin, "run", "-c", configFile)
 	err = cmd.Start()
 	if err != nil {
