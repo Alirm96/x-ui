@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"runtime"
 
 	"github.com/alireza0/x-ui/database"
 	"github.com/alireza0/x-ui/database/model"
@@ -718,6 +719,7 @@ func (s *OutboundService) measureLatency(outbound *model.Outbound, testURL strin
 		arch = "amd64"
 	}
 	xrayBin := "/app/bin/xray-linux-" + arch
+	logger.Info("[DEBUG] Using xray binary:", xrayBin, "(GOARCH:", runtime.GOARCH, ")")
 	cmd := exec.Command(xrayBin, "run", "-c", configFile)
 	err = cmd.Start()
 	if err != nil {
