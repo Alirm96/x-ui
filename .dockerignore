@@ -1,0 +1,74 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+docker-compose*.yml
+.dockerignore
+Dockerfile
+
+# Build artifacts
+tmp/
+build/
+bin/x-ui
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+testdata/
+
+# Database (will be volume mounted)
+db/*.db
+db/*.db-shm
+db/*.db-wal
+
+# Certificates (will be volume mounted)
+cert/*.crt
+cert/*.key
+cert/*.pem
+
+# Air configuration (for dev only)
+.air.toml
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.iml
+
+# Logs
+*.log
+logs/
+
+# Node modules (if any)
+node_modules/
+
+# Backup files
+*.bak
+*.backup
+
+# Go module cache
+go.sum
+vendor/

@@ -53,6 +53,14 @@ type AllSetting struct {
 	SubJsonNoises    string `json:"subJsonNoises" form:"subJsonNoises"`
 	SubJsonMux       string `json:"subJsonMux" form:"subJsonMux"`
 	SubJsonRules     string `json:"subJsonRules" form:"subJsonRules"`
+	
+	// Outbound settings
+	OutboundTestInterval  int    `json:"outboundTestInterval" form:"outboundTestInterval"`   // Test interval in hours
+	OutboundTestURL       string `json:"outboundTestURL" form:"outboundTestURL"`             // URL for testing
+	OutboundTestTimeout   int    `json:"outboundTestTimeout" form:"outboundTestTimeout"`     // Timeout in seconds
+	OutboundCleanupDays   int    `json:"outboundCleanupDays" form:"outboundCleanupDays"`     // Days before cleanup
+	OutboundAutoRoute     bool   `json:"outboundAutoRoute" form:"outboundAutoRoute"`         // Enable auto-routing
+	OutboundRouteInterval int    `json:"outboundRouteInterval" form:"outboundRouteInterval"` // Route update interval in hours
 }
 
 func (s *AllSetting) CheckValid() error {

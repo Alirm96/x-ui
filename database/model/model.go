@@ -16,6 +16,9 @@ const (
 	Http        Protocol = "http"
 	Trojan      Protocol = "trojan"
 	Shadowsocks Protocol = "shadowsocks"
+	Socks       Protocol = "socks"
+	Freedom     Protocol = "freedom"
+	Blackhole   Protocol = "blackhole"
 )
 
 type User struct {
@@ -85,4 +88,46 @@ type VLESSSettings struct {
 	Decryption string   `json:"decryption"`
 	Encryption string   `json:"encryption"`
 	Fallbacks  []any    `json:"fallbacks"`
+}
+
+type Outbound struct {
+	Id             int      `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
+	UserId         int      `json:"-"`
+	Protocol       Protocol `json:"protocol" form:"protocol"`
+	Address        string   `json:"address" form:"address"`
+	Port           int      `json:"port" form:"port"`
+	Settings       string   `json:"settings" form:"settings"`
+	StreamSettings string   `json:"streamSettings" form:"streamSettings"`
+	Tag            string   `json:"tag" form:"tag" gorm:"unique"`
+	Remark         string   `json:"remark" form:"remark"`
+	Enable         bool     `json:"enable" form:"enable"`
+	IsSystem       bool     `json:"isSystem" form:"isSystem" gorm:"default:false"` // true for built-in outbounds like direct/block
+	GroupName      string   `json:"groupName" form:"groupName" gorm:"default:'default'"` // group name for organization
+	LastTestTime   int64    `json:"lastTestTime" form:"lastTestTime"`
+	LastTestResult int      `json:"lastTestResult" form:"lastTestResult"` // latency in ms, -1 for failed
+	TestFailCount  int      `json:"testFailCount" form:"testFailCount"`
+	CreatedAt      int64    `json:"createdAt" form:"createdAt"`
+	UpdatedAt      int64    `json:"updatedAt" form:"updatedAt"`
+}
+
+type OutboundTestHistory struct {
+	Id           int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
+	OutboundId   int    `json:"outboundId" form:"outboundId"`
+	TestTime     int64  `json:"testTime" form:"testTime"`
+	Success      bool   `json:"success" form:"success"`
+	LatencyMs    int    `json:"latencyMs" form:"latencyMs"`
+	ErrorMessage string `json:"errorMessage" form:"errorMessage"`
+}
+
+type Subscription struct {
+	Id             int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
+	GroupName      string `json:"groupName" form:"groupName" gorm:"not null"` // associated group
+	Remark         string `json:"remark" form:"remark" gorm:"not null"`       // user-defined name
+	URL            string `json:"url" form:"url" gorm:"not null"`             // subscription URL
+	Enabled        bool   `json:"enabled" form:"enabled" gorm:"default:true"`
+	UpdateInterval int    `json:"updateInterval" form:"updateInterval" gorm:"default:0"` // auto-update interval in hours (0 = manual only)
+	UserAgent      string `json:"userAgent" form:"userAgent" gorm:"default:''"`
+	LastUpdate     int64  `json:"lastUpdate" form:"lastUpdate"` // unix timestamp of last successful update
+	CreatedAt      int64  `json:"createdAt" form:"createdAt"`
+	UpdatedAt      int64  `json:"updatedAt" form:"updatedAt"`
 }

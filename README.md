@@ -17,20 +17,33 @@
    <img src="https://nowpayments.io/images/embeds/donation-button-black.svg" alt="Crypto donation button by NOWPayments">
 </a>
 
+## 🚀 For Developers
+
+**Want to contribute or develop locally?** Check out our comprehensive development guide:
+
+📖 **[DEVELOPMENT.md](DEVELOPMENT.md)** - Complete guide for setting up hot-reload development environment
+
+Quick start for developers:
+```bash
+make dev-up      # Start development environment with hot-reload
+make dev-logs    # View logs
+make dev-shell   # Enter container shell
+```
+
 ## Quick Overview
-| Features                               |      Enable?       |
-| -------------------------------------- | :----------------: |
-| Multi-Protocol                         | :heavy_check_mark: |
-| Multi-Language                         | :heavy_check_mark: |
-| Multi-Client/Inbound                   | :heavy_check_mark: |
-| Advanced Traffic Routing Interface     | :heavy_check_mark: |
-| Client & Traffic & System Status       | :heavy_check_mark: |
-| Date & Traffic Cap Based on First Use  | :heavy_check_mark: |
-| REST API                               | :heavy_check_mark: |
-| TG Bot (DB backup + admin + client)    | :heavy_check_mark: |
-| Subscription Service (link + info)     | :heavy_check_mark: |
-| Search in Deep                         | :heavy_check_mark: |
-| Dark/Light Theme                       | :heavy_check_mark: |
+| Features                              |      Enable?       |
+| ------------------------------------- | :----------------: |
+| Multi-Protocol                        | :heavy_check_mark: |
+| Multi-Language                        | :heavy_check_mark: |
+| Multi-Client/Inbound                  | :heavy_check_mark: |
+| Advanced Traffic Routing Interface    | :heavy_check_mark: |
+| Client & Traffic & System Status      | :heavy_check_mark: |
+| Date & Traffic Cap Based on First Use | :heavy_check_mark: |
+| REST API                              | :heavy_check_mark: |
+| TG Bot (DB backup + admin + client)   | :heavy_check_mark: |
+| Subscription Service (link + info)    | :heavy_check_mark: |
+| Search in Deep                        | :heavy_check_mark: |
+| Dark/Light Theme                      | :heavy_check_mark: |
 
   
 ## Install & Upgrade to Latest Version
@@ -205,7 +218,7 @@ docker build -t x-ui .
 - `/xui/API/inbounds` base for following actions:
 
 | Method | Path                               | Action                                    |
-| :----: | ---------------------------------  | ----------------------------------------- |
+| :----: | ---------------------------------- | ----------------------------------------- |
 | `GET`  | `"/"`                              | Get all inbounds                          |
 | `GET`  | `"/get/:id"`                       | Get inbound with inbound.id               |
 | `POST` | `"/add"`                           | Add inbound                               |
@@ -232,22 +245,22 @@ docker build -t x-ui .
 
 - `/xui/API/server` base for following actions:
 
-| Method | Path                               | Action                                    |
-| :----: | ---------------------------------  | ----------------------------------------- |
-| `GET`  | `"/status"`                        | Get server status                         |
-| `GET`  | `"/getDb"`                         | Get database backup                       |
-| `GET`  | `"/createbackup"`                  | Telegram bot sends backup to admins       |
-| `GET`  | `"/getConfigJson"`                 | Get config.json                           |
-| `GET`  | `"/getXrayVersion"`                | Get last xray versions                    |
-| `GET`  | `"/getNewVlessEnc"`                | Get new vless enc                         |
-| `GET`  | `"/getNewX25519Cert"`              | Get new x25519 cert                       |
-| `GET`  | `"/getNewmldsa65"`                 | Get new mldsa65                           |
-| `POST` | `"/getNewEchCert"`                 | Get new ech cert                          |
-| `POST` | `"/importDB"`                      | Import database to x-ui                   |
-| `POST` | `"/stopXrayService"`               | Stop xray service                         |
-| `POST` | `"/restartXrayService"`            | Restart xray service                      |
-| `POST` | `"/installXray/:version"`          | Install specific version of xray          |
-| `POST` | `"/logs/:count"`                   | Get panel/xray logs                       |
+| Method | Path                      | Action                              |
+| :----: | ------------------------- | ----------------------------------- |
+| `GET`  | `"/status"`               | Get server status                   |
+| `GET`  | `"/getDb"`                | Get database backup                 |
+| `GET`  | `"/createbackup"`         | Telegram bot sends backup to admins |
+| `GET`  | `"/getConfigJson"`        | Get config.json                     |
+| `GET`  | `"/getXrayVersion"`       | Get last xray versions              |
+| `GET`  | `"/getNewVlessEnc"`       | Get new vless enc                   |
+| `GET`  | `"/getNewX25519Cert"`     | Get new x25519 cert                 |
+| `GET`  | `"/getNewmldsa65"`        | Get new mldsa65                     |
+| `POST` | `"/getNewEchCert"`        | Get new ech cert                    |
+| `POST` | `"/importDB"`             | Import database to x-ui             |
+| `POST` | `"/stopXrayService"`      | Stop xray service                   |
+| `POST` | `"/restartXrayService"`   | Restart xray service                |
+| `POST` | `"/installXray/:version"` | Install specific version of xray    |
+| `POST` | `"/logs/:count"`          | Get panel/xray logs                 |
 
 
 </details>

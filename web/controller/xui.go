@@ -7,9 +7,11 @@ import (
 type XUIController struct {
 	BaseController
 
-	inboundController     *InboundController
-	settingController     *SettingController
-	xraySettingController *XraySettingController
+	inboundController      *InboundController
+	outboundController     *OutboundController
+	settingController      *SettingController
+	xraySettingController  *XraySettingController
+	subscriptionController *SubscriptionController
 }
 
 func NewXUIController(g *gin.RouterGroup) *XUIController {
@@ -24,12 +26,17 @@ func (a *XUIController) initRouter(g *gin.RouterGroup) {
 
 	g.GET("/", a.index)
 	g.GET("/inbounds", a.inbounds)
+	g.GET("/outbounds", a.outbounds)
+	g.GET("/routing", a.routing)
 	g.GET("/settings", a.settings)
 	g.GET("/xray", a.xraySettings)
+	g.GET("/update", a.update)
 
 	a.inboundController = NewInboundController(g)
+	a.outboundController = NewOutboundController(g)
 	a.settingController = NewSettingController(g)
 	a.xraySettingController = NewXraySettingController(g)
+	a.subscriptionController = NewSubscriptionController(g)
 }
 
 func (a *XUIController) index(c *gin.Context) {
@@ -40,10 +47,23 @@ func (a *XUIController) inbounds(c *gin.Context) {
 	html(c, "inbounds.html", "pages.inbounds.title", nil)
 }
 
+func (a *XUIController) outbounds(c *gin.Context) {
+	html(c, "outbounds.html", "pages.outbounds.title", nil)
+}
+
+// Routing management page
+func (a *XUIController) routing(c *gin.Context) {
+	html(c, "routing.html", "pages.routing.title", nil)
+}
+
 func (a *XUIController) settings(c *gin.Context) {
 	html(c, "settings.html", "pages.settings.title", nil)
 }
 
 func (a *XUIController) xraySettings(c *gin.Context) {
 	html(c, "xray.html", "pages.xray.title", nil)
+}
+
+func (a *XUIController) update(c *gin.Context) {
+	html(c, "update.html", "pages.update.title", nil)
 }

@@ -46,6 +46,12 @@ func runWebServer() {
 		log.Fatal(err)
 	}
 
+	// Initialize default inbounds (SOCKS on 10808, HTTP on 10809)
+	inboundService := service.InboundService{}
+	if err := inboundService.InitDefaultInbounds(); err != nil {
+		logger.Warning("Failed to initialize default inbounds:", err)
+	}
+
 	var server *web.Server
 
 	server = web.NewServer()

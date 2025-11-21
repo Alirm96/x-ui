@@ -51,7 +51,9 @@ func (x *XrayAPI) Init(apiPort int) (err error) {
 }
 
 func (x *XrayAPI) Close() {
-	x.grpcClient.Close()
+	if x.grpcClient != nil {
+		x.grpcClient.Close()
+	}
 	x.HandlerServiceClient = nil
 	x.StatsServiceClient = nil
 	x.isConnected = false

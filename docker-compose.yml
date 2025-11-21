@@ -2,14 +2,19 @@
 
 services:
   xui:
-    image: alireza7/x-ui
+    image: cosmtrek/air:latest
     container_name: x-ui
     hostname: yourhostname
+    working_dir: /app
     volumes:
+      - $PWD:/app
       - $PWD/db/:/etc/x-ui/
       - $PWD/cert/:/root/cert/
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
+      XUI_DEBUG: "true"
+      XUI_DEV_MODE: "true"
     tty: true
     network_mode: host
     restart: unless-stopped
+

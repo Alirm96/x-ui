@@ -38,6 +38,13 @@ class AllSetting {
         this.subJsonMux = "";
         this.subJsonRules = "";
 
+        this.outboundTestInterval = 4;
+        this.outboundTestURL = "https://www.google.com";
+        this.outboundTestTimeout = 10;
+        this.outboundCleanupDays = 7;
+        this.outboundAutoRoute = false;
+        this.outboundRouteInterval = 4;
+
         this.timeLocation = "Asia/Tehran";
 
         if (data == null) {

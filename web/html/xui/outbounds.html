@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+{{template "head" .}}
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/codemirror.min.css?{{ .cur_ver }}">
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/fold/foldgutter.css">
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/xq.min.css?{{ .cur_ver }}">
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/lint/lint.css">
+
+<script src="{{ .base_path }}assets/base64/base64.min.js"></script>
+<script src="{{ .base_path }}assets/codemirror/codemirror.js?{{ .cur_ver }}"></script>
+<script src="{{ .base_path }}assets/codemirror/javascript.js"></script>
+<script src="{{ .base_path }}assets/codemirror/jshint.js"></script>
+<script src="{{ .base_path }}assets/codemirror/jsonlint.js"></script>
+<script src="{{ .base_path }}assets/codemirror/lint/lint.js"></script>
+<script src="{{ .base_path }}assets/codemirror/lint/javascript-lint.js"></script>
+<script src="{{ .base_path }}assets/codemirror/hint/javascript-hint.js"></script>
+<script src="{{ .base_path }}assets/codemirror/fold/foldcode.js"></script>
+<script src="{{ .base_path }}assets/codemirror/fold/foldgutter.js"></script>
+<script src="{{ .base_path }}assets/codemirror/fold/brace-fold.js"></script>
+<style>
+    @media (min-width: 769px) {
+        .ant-layout-content {
+            margin: 24px 16px;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .ant-card-body {
+            padding: .5rem;
+        }
+    }
+
+    .ant-table-pagination.ant-pagination {
+        text-align: center !important;
+        justify-content: center !important;
+    }
+
+    .ant-card .ant-table-wrapper .ant-table-pagination {
+        text-align: center !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+</style>
+
+<body>
+    <a-layout id="app" v-cloak :class="themeSwitcher.currentTheme">
+        {{ template "commonSider" . }}
+        <a-layout id="content-layout">
+            <a-layout-content>
+                <a-spin :spinning="spinning" :delay="500" tip='{{ i18n "loading"}}'>
+                    <transition name="list" appear>
+                        <a-card hoverable>
+                            <a-row type="flex" justify="space-between">
+                                <a-col :xs="24" :sm="8" :lg="8">
+                                    <strong>{{ i18n "pages.outbounds.totalOutbounds" }}:</strong>
+                                    <a-tag color="blue">[[ outbounds.length ]]</a-tag>
+                                </a-col>
+                                <a-col :xs="24" :sm="8" :lg="8" style="text-align: center;">
+                                    <strong>{{ i18n "pages.outbounds.testedOutbounds" }}:</strong>
+                                    <a-tag color="blue">[[ testedCount ]]</a-tag>
+                                </a-col>
+                                <a-col :xs="24" :sm="8" :lg="8" style="text-align: right;">
+                                    <strong>{{ i18n "pages.outbounds.bestLatency" }}:</strong>
+                                    <a-tag color="blue" v-if="bestOutbound">[[ bestOutbound.lastTestResult ]]ms</a-tag>
+                                    <a-tag color="grey" v-else>N/A</a-tag>
+                                </a-col>
+                            </a-row>
+                            <div style="margin-top: 10px;">
+                                <a-button type="danger" icon="reload" @click="restartXray" style="margin-bottom: 8px;">
+                                    {{ i18n "pages.xray.restart" }}
+                                </a-button>
+                                <a-alert v-if="autoRouteEnabled && bestOutbound" type="success" show-icon
+                                    :closable="false">
+                                    <template slot="message">
+                                        Auto-routing active: <strong>[[ bestOutbound.remark ]]</strong> ([[
+                                        bestOutbound.lastTestResult ]]ms)
+                                    </template>
+                                </a-alert>
+                            </div>
+                        </a-card>
+                    </transition>
+                    <!-- Xray Configuration Error Alert -->
+                    <transition name="list" appear>
+                        <a-alert v-if="xrayError && xrayError.type === 'outbound'" type="error" :closable="false"
+                            show-icon style="margin-top: 10px;">
+                            <template slot="message">
+                                <strong>Xray Configuration Error</strong>
+                            </template>
+                            <template slot="description">
+                                <div v-if="xrayError.tag" style="margin-bottom: 8px;">
+                                    <strong>Outbound Tag:</strong> <code>[[ xrayError.tag ]]</code>
+                                </div>
+                                <div
+                                    style="font-family: monospace; white-space: pre-wrap; background: #fff1f0; padding: 12px; border-radius: 4px; border: 1px solid #ffa39e;">
+                                    [[ xrayError.message ]]
+                                </div>
+                                <div v-if="xrayError.message && xrayError.message.includes('users')"
+                                    style="margin-top: 12px;">
+                                    <a-alert type="warning" show-icon :closable="false" style="margin-bottom: 12px;">
+                                        <template slot="message">
+                                            <strong>Fix Available</strong>
+                                        </template>
+                                        <template slot="description">
+                                            This error occurs because one or more VLESS outbounds have multiple users
+                                            configured.
+                                            Xray-core v25.9.11+ requires exactly one user per VLESS outbound. Click the
+                                            button below
+                                            to automatically split these outbounds into separate configurations.
+                                        </template>
+                                    </a-alert>
+                                    <a-button type="primary" icon="tool" @click="migrateVLESSOutbounds"
+                                        :loading="migrating">
+                                        Auto-Fix VLESS Configuration
+                                    </a-button>
+                                </div>
+                            </template>
+                        </a-alert>
+                    </transition>
+                    <transition name="list" appear>
+                        <a-card hoverable style="margin-top: 10px;">
+                            <div slot="title">
+                                <a-row :gutter="[8, 8]" type="flex" align="middle">
+                                    <a-col :xs="24" :sm="12" :lg="16">
+                                        <a-space wrap>
+                                            <a-button type="primary" icon="plus" @click="openAddOutbound">
+                                                {{ i18n "pages.outbounds.addOutbound" }}
+                                            </a-button>
+                                            <a-button type="default" icon="import" @click="openImportOutbound">
+                                                {{ i18n "pages.outbounds.import" }}
+                                            </a-button>
+                                        </a-space>
+                                    </a-col>
+                                    <a-col :xs="24" :sm="12" :lg="8" style="text-align: right;">
+                                        <div style="display: inline-block;">
+                                            <a-space>
+                                                <span v-if="autoRouteEnabled">
+                                                    <a-input-number v-model="routeInterval" :min="1" :max="48"
+                                                        size="small" style="width: 50px;"
+                                                        @change="saveRouteInterval"></a-input-number>
+                                                    hours
+                                                </span>
+                                                <a-switch v-model="autoRouteEnabled"
+                                                    @change="toggleAutoRoute"></a-switch>
+                                                <span style="margin-left: 8px;"><strong>Auto-Routing</strong></span>
+                                                <a-tooltip title="Outbound Settings">
+                                                    <a-button type="link" icon="setting"
+                                                        @click="openSettings"></a-button>
+                                                </a-tooltip>
+                                            </a-space>
+                                        </div>
+                                    </a-col>
+                                </a-row>
+                            </div>
+
+                            <!-- Search Box and Management Buttons -->
+                            <a-row :gutter="[8, 8]" style="margin-top: 10px;">
+                                <a-col :xs="24" :sm="12" :lg="16">
+                                    <a-space wrap>
+                                        <a-button icon="team" @click="openGroupManager">
+                                            Manage Groups
+                                        </a-button>
+                                        <a-button icon="cloud-download" @click="openSubscriptionManager">
+                                            Subscriptions
+                                        </a-button>
+                                    </a-space>
+                                </a-col>
+                                <a-col :xs="24" :sm="12" :lg="8" style="text-align: right;">
+                                    <a-input v-model="searchKey" placeholder='{{ i18n "search" }}' prefix-icon="search"
+                                        allow-clear style="width: 100%; max-width: 300px;">
+                                        <a-icon slot="prefix" type="search" style="color: #999;" />
+                                    </a-input>
+                                </a-col>
+                            </a-row>
+
+                            <!-- Group Filters -->
+                            <a-row style="margin-top: 10px;">
+                                <a-col :span="24">
+                                    <a-space wrap>
+                                        <a-button :type="selectedGroup === 'all' ? 'primary' : 'default'" size="small"
+                                            @click="selectedGroup = 'all'">
+                                            All ([[ outbounds.length ]])
+                                        </a-button>
+                                        <a-button v-for="group in uniqueGroups" :key="group"
+                                            :type="selectedGroup === group ? 'primary' : 'default'" size="small"
+                                            @click="selectedGroup = group">
+                                            [[ group ]] ([[ getGroupCount(group) ]])
+                                        </a-button>
+                                    </a-space>
+                                </a-col>
+                            </a-row>
+                            </div>
+
+                            <!-- Bulk Actions Bar -->
+                            <a-alert v-if="selectedRowKeys.length > 0" type="info" style="margin-top: 10px;">
+                                <template slot="message">
+                                    <a-row type="flex" align="middle" :gutter="16">
+                                        <a-col>
+                                            <strong>[[ selectedRowKeys.length ]] outbound(s) selected</strong>
+                                        </a-col>
+                                        <a-col>
+                                            <a-space>
+                                                <a-button size="small" icon="play-circle"
+                                                    @click="testSelectedOutbounds">
+                                                    Test Selected
+                                                </a-button>
+                                                <a-dropdown>
+                                                    <a-menu slot="overlay" @click="handleBulkGroupChange">
+                                                        <a-menu-item v-for="group in uniqueGroups" :key="group">
+                                                            [[ group ]]
+                                                        </a-menu-item>
+                                                    </a-menu>
+                                                    <a-button size="small" icon="folder">
+                                                        Move to Group <a-icon type="down" />
+                                                    </a-button>
+                                                </a-dropdown>
+                                                <a-button size="small" type="danger" icon="delete"
+                                                    @click="deleteSelectedOutbounds">
+                                                    Delete Selected
+                                                </a-button>
+                                                <a-button size="small" @click="selectedRowKeys = []">
+                                                    Clear Selection
+                                                </a-button>
+                                            </a-space>
+                                        </a-col>
+                                    </a-row>
+                                </template>
+                            </a-alert>
+
+                            <a-table :columns="columns" :row-key="outbound => outbound.id"
+                                :data-source="filteredOutbounds" :row-selection="{
+                                    selectedRowKeys: selectedRowKeys,
+                                    onChange: onSelectChange,
+                                    getCheckboxProps: record => ({
+                                        props: {
+                                            disabled: record.isSystem
+                                        }
+                                    })
+                                }" :pagination="{
+                                     showSizeChanger: true,
+                                     showLessItems: true,
+                                     showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+                                     position: 'bottom',
+                                     class: 'custom-pagination'
+                                 }" style="margin-top: 10px">
+                                <template slot="protocol" slot-scope="text, outbound">
+                                    <span>[[ outbound.protocol ]]</span>
+                                </template>
+                                <template slot="address" slot-scope="text, outbound">
+                                    [[ outbound.address ]]:[[ outbound.port ]]
+                                </template>
+                                <template slot="testResult" slot-scope="text, outbound">
+                                    <span v-if="outbound.testing">
+                                        <a-spin size="small" />
+                                    </span>
+                                    <span v-else>
+                                        <a-tag v-if="outbound.lastTestResult > 0"
+                                            :color="getLatencyColor(outbound.lastTestResult)">
+                                            [[ outbound.lastTestResult ]]ms
+                                        </a-tag>
+                                        <a-tag v-else-if="outbound.lastTestResult === -1" color="red">
+                                            Failed
+                                        </a-tag>
+                                        <a-tag v-else color="default">
+                                            Not tested
+                                        </a-tag>
+                                    </span>
+                                </template>
+                                <template slot="lastTestTime" slot-scope="text, outbound">
+                                    <span v-if="outbound.lastTestTime > 0">
+                                        [[ formatDate(outbound.lastTestTime) ]]
+                                    </span>
+                                    <span v-else>Never</span>
+                                </template>
+                                <template slot="action" slot-scope="text, outbound">
+                                    <a-space size="small">
+                                        <a-tooltip title="Test">
+                                            <a-button type="link" size="small" icon="play-circle"
+                                                @click="testOutbound(outbound)"></a-button>
+                                        </a-tooltip>
+                                        <a-tooltip title="Edit">
+                                            <a-button type="link" size="small" icon="edit"
+                                                @click="editOutbound(outbound)"
+                                                :disabled="outbound.isSystem"></a-button>
+                                        </a-tooltip>
+                                        <a-tooltip title="Delete">
+                                            <a-button type="link" size="small" icon="delete"
+                                                @click="deleteOutbound(outbound)"
+                                                :disabled="outbound.isSystem"></a-button>
+                                        </a-tooltip>
+                                    </a-space>
+                                </template>
+                            </a-table>
+                        </a-card>
+                    </transition>
+                </a-spin>
+            </a-layout-content>
+        </a-layout>
+
+        <!-- Advanced Outbound Modal will be included at the end -->
+
+        <!-- Import Outbound Modal -->
+        <a-modal v-model="importModal.visible" title='{{ i18n "pages.outbounds.importOutbound" }}' @ok="importOutbound"
+            :confirm-loading="importModal.confirmLoading">
+            <a-form layout="vertical">
+                <a-form-item label='{{ i18n "pages.outbounds.importLink" }}'
+                    help="Supports vmess://, vless://, trojan://, ss:// links. Multiple links can be separated by newline, comma, semicolon, or space.">
+                    <a-textarea v-model="importModal.link" :rows="6"
+                        placeholder="vmess://...&#10;vless://...&#10;trojan://..."></a-textarea>
+                </a-form-item>
+                <a-form-item label="Group">
+                    <a-select v-model="importModal.groupName" placeholder="Select a group" style="width: 100%">
+                        <a-select-option value="default">default</a-select-option>
+                        <a-select-option v-for="group in uniqueGroups.filter(g => g !== 'default')" :key="group"
+                            :value="group">
+                            [[ group ]]
+                        </a-select-option>
+                    </a-select>
+                </a-form-item>
+            </a-form>
+        </a-modal>
+
+        <!-- Outbound Settings Modal -->
+        <a-modal v-model="settingsModal.visible" title='{{ i18n "pages.settings.outboundSettings" }}' @ok="saveSettings"
+            :confirm-loading="settingsModal.confirmLoading" width="700px">
+            <a-form layout="vertical">
+                <!-- Test Interval -->
+                <a-form-item label='{{ i18n "pages.settings.outbound.testInterval" }}'>
+                    <template slot="extra">{{ i18n "pages.settings.outbound.testIntervalDesc" }}</template>
+                    <a-input-number v-model="settingsModal.testInterval" :min="1" :max="168" style="width: 100%">
+                        <template slot="addonAfter">{{ i18n "hour" }}</template>
+                    </a-input-number>
+                </a-form-item>
+
+                <!-- Test URL -->
+                <a-form-item label='{{ i18n "pages.settings.outbound.testURL" }}'>
+                    <template slot="extra">{{ i18n "pages.settings.outbound.testURLDesc" }}</template>
+                    <a-input v-model="settingsModal.testURL" placeholder="https://www.google.com"></a-input>
+                </a-form-item>
+
+                <!-- Test Timeout -->
+                <a-form-item label='{{ i18n "pages.settings.outbound.testTimeout" }}'>
+                    <template slot="extra">{{ i18n "pages.settings.outbound.testTimeoutDesc" }}</template>
+                    <a-input-number v-model="settingsModal.testTimeout" :min="5" :max="60" style="width: 100%">
+                        <template slot="addonAfter">{{ i18n "second" }}</template>
+                    </a-input-number>
+                </a-form-item>
+
+                <!-- Cleanup Days -->
+                <a-form-item label='{{ i18n "pages.settings.outbound.cleanupDays" }}'>
+                    <template slot="extra">{{ i18n "pages.settings.outbound.cleanupDaysDesc" }}</template>
+                    <a-input-number v-model="settingsModal.cleanupDays" :min="1" :max="365" style="width: 100%">
+                        <template slot="addonAfter">{{ i18n "day" }}</template>
+                    </a-input-number>
+                </a-form-item>
+
+                <!-- Cleanup Queue -->
+                <a-form-item label='{{ i18n "pages.settings.outbound.cleanupQueue" }}'>
+                    <template slot="extra">{{ i18n "pages.settings.outbound.cleanupQueueDesc" }}</template>
+                    <a-button type="primary" @click="loadCleanupQueue" size="small">
+                        <i class="fas fa-sync-alt"></i> {{ i18n "pages.settings.outbound.loadQueue" }}
+                    </a-button>
+                    <a-table v-if="cleanupQueue.length > 0" :columns="cleanupColumns" :data-source="cleanupQueue"
+                        :pagination="false" :scroll="{ x: true }" size="small" style="margin-top: 10px">
+                        <template slot="remark" slot-scope="text">
+                            <span style="word-break: break-word">[[text]]</span>
+                        </template>
+                        <template slot="failCount" slot-scope="text">
+                            <a-tag color="red">[[text]]</a-tag>
+                        </template>
+                        <template slot="lastTest" slot-scope="text">
+                            <span>[[formatDate(text)]]</span>
+                        </template>
+                        <template slot="daysUntilCleanup" slot-scope="text">
+                            <a-tag :color="getDaysColor(text)">
+                                [[text]] {{ i18n "day" }}[[ text > 1 ? 's' : '' ]]
+                            </a-tag>
+                        </template>
+                    </a-table>
+                    <a-empty v-else-if="cleanupQueueLoaded"
+                        :description='`{{ i18n "pages.settings.outbound.noCleanupItems" }}`' style="margin-top: 10px" />
+                </a-form-item>
+            </a-form>
+        </a-modal>
+
+        <!-- Group Manager Modal -->
+        <a-modal v-model="groupModal.visible" title="Manage Groups" width="600px" @ok="groupModal.visible = false">
+            <a-list bordered :data-source="groupList" style="margin-bottom: 16px;">
+                <a-list-item slot="renderItem" slot-scope="group">
+                    <a-list-item-meta>
+                        <span slot="title">[[ group.name ]]</span>
+                        <span slot="description">[[ group.count ]] outbound(s)</span>
+                    </a-list-item-meta>
+                    <template slot="actions">
+                        <a-button size="small" icon="edit" @click="editGroup(group)"
+                            v-if="!group.isSystem">Edit</a-button>
+                        <a-button size="small" type="danger" icon="delete" @click="deleteGroup(group)"
+                            v-if="!group.isSystem">Delete</a-button>
+                    </template>
+                </a-list-item>
+            </a-list>
+            <a-button type="dashed" block icon="plus" @click="addNewGroup">
+                Add New Group
+            </a-button>
+        </a-modal>
+
+        <!-- Add/Edit Group Modal -->
+        <a-modal v-model="groupEditModal.visible" :title="groupEditModal.title" @ok="saveGroup"
+            :confirm-loading="groupEditModal.confirmLoading">
+            <a-form layout="vertical">
+                <a-form-item label="Group Name">
+                    <a-input v-model="groupEditModal.groupName" placeholder="Enter group name" />
+                </a-form-item>
+            </a-form>
+        </a-modal>
+
+        <!-- Subscription Manager Modal -->
+        <a-modal v-model="subscriptionModal.visible" title="Subscription Manager" width="800px">
+            <a-list bordered :data-source="subscriptions" style="margin-bottom: 16px;">
+                <a-list-item slot="renderItem" slot-scope="subscription">
+                    <a-list-item-meta>
+                        <span slot="title">
+                            <a-tag :color="subscription.enabled ? 'green' : 'red'">
+                                [[ subscription.enabled ? 'Enabled' : 'Disabled' ]]
+                            </a-tag>
+                            [[ subscription.remark ]]
+                        </span>
+                        <span slot="description">
+                            <a-space direction="vertical" size="small">
+                                <span><strong>Group:</strong> [[ subscription.groupName ]]</span>
+                                <span><strong>URL:</strong> <a-typography-text copyable>[[ subscription.url
+                                        ]]</a-typography-text></span>
+                                <span v-if="subscription.lastUpdate > 0"><strong>Last Update:</strong> [[
+                                    formatDate(subscription.lastUpdate) ]]</span>
+                                <span v-else><strong>Last Update:</strong> Never</span>
+                                <span v-if="subscription.updateInterval > 0"><strong>Auto-Update:</strong> Every [[
+                                    subscription.updateInterval ]] hour(s)</span>
+                            </a-space>
+                        </span>
+                    </a-list-item-meta>
+                    <template slot="actions">
+                        <a-button size="small" icon="reload" @click="refreshSubscription(subscription)"
+                            :loading="subscription.refreshing">
+                            Refresh
+                        </a-button>
+                        <a-button size="small" icon="edit" @click="editSubscription(subscription)">
+                            Edit
+                        </a-button>
+                        <a-button size="small" type="danger" icon="delete" @click="deleteSubscription(subscription)">
+                            Delete
+                        </a-button>
+                    </template>
+                </a-list-item>
+            </a-list>
+            <a-button type="dashed" block icon="plus" @click="addNewSubscription">
+                Add New Subscription
+            </a-button>
+            <template slot="footer">
+                <a-button @click="subscriptionModal.visible = false">Close</a-button>
+            </template>
+        </a-modal>
+
+        <!-- Add/Edit Subscription Modal -->
+        <a-modal v-model="subscriptionEditModal.visible" :title="subscriptionEditModal.title" @ok="saveSubscription"
+            :confirm-loading="subscriptionEditModal.confirmLoading" width="600px">
+            <a-form layout="vertical">
+                <a-form-item label="Remark" required>
+                    <a-input v-model="subscriptionEditModal.subscription.remark"
+                        placeholder="Enter subscription name" />
+                </a-form-item>
+                <a-form-item label="Subscription URL" required>
+                    <a-input v-model="subscriptionEditModal.subscription.url" placeholder="Enter subscription URL" />
+                </a-form-item>
+                <a-form-item label="Group" required>
+                    <a-select v-model="subscriptionEditModal.subscription.groupName" style="width: 100%">
+                        <a-select-option v-for="group in uniqueGroups" :key="group" :value="group">
+                            [[ group ]]
+                        </a-select-option>
+                    </a-select>
+                </a-form-item>
+                <a-form-item label="User-Agent">
+                    <a-input v-model="subscriptionEditModal.subscription.userAgent"
+                        placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" />
+                </a-form-item>
+                <a-form-item label="Auto-Update Interval (hours, 0 = manual only)">
+                    <a-input-number v-model="subscriptionEditModal.subscription.updateInterval" :min="0" :max="720"
+                        style="width: 100%" />
+                </a-form-item>
+                <a-form-item label="Enabled">
+                    <a-switch v-model="subscriptionEditModal.subscription.enabled" />
+                </a-form-item>
+            </a-form>
+        </a-modal>
+    </a-layout>
+
+    {{template "js" .}}
+    <script>
+        // Theme switcher
+        function createThemeSwitcher() {
+            const isDarkTheme = localStorage.getItem('dark-mode') === 'true';
+            const theme = isDarkTheme ? 'dark' : 'light';
+            return {
+                isDarkTheme,
+                get currentTheme() {
+                    return this.isDarkTheme ? 'dark' : 'light';
+                },
+                toggleTheme() {
+                    this.isDarkTheme = !this.isDarkTheme;
+                    localStorage.setItem('dark-mode', this.isDarkTheme);
+                    document.getElementById('message').className = themeSwitcher.currentTheme;
+                },
+            };
+        }
+
+        const themeSwitcher = createThemeSwitcher();
+
+        Vue.component('theme-switch', {
+            props: [],
+            template: `<a-switch size="small" :default-checked="themeSwitcher.isDarkTheme" @change="themeSwitcher.toggleTheme()"></a-switch>`,
+            data: () => ({ themeSwitcher }),
+            mounted() {
+                this.$message.config({ getContainer: () => document.getElementById('message') });
+                document.getElementById('message').className = themeSwitcher.currentTheme;
+            }
+        });
+    </script>
+
+    <!-- Load Outbound Model -->
+    <script src="{{ .base_path }}assets/js/model/outbound.js"></script>
+
+    <script>
+        const app = new Vue({
+            delimiters: ['[[', ']]'],
+            el: '#app',
+            data: {
+                siderDrawer,
+                themeSwitcher,
+                spinning: false,
+                xrayError: null,  // Xray configuration error
+                migrating: false,  // VLESS migration in progress
+                outbounds: [],
+                selectedRowKeys: [],  // Selected outbound IDs
+                selectedGroup: 'all',  // Selected group filter
+                customGroups: [],  // User-created groups that don't have outbounds yet
+                autoRouteEnabled: false,
+                routeInterval: 4,  // hours
+                allSettings: null,  // Store all settings for updating
+                searchKey: '',
+                cmOptions: {
+                    lineNumbers: true,
+                    mode: "application/json",
+                    lint: true,
+                    styleActiveLine: true,
+                    matchBrackets: true,
+                    theme: "xq",
+                    autoCloseTags: true,
+                    lineWrapping: true,
+                    indentUnit: 2,
+                    indentWithTabs: true,
+                    smartIndent: true,
+                    tabSize: 2,
+                    lineWiseCopyCut: false,
+                    foldGutter: true,
+                    gutters: [
+                        "CodeMirror-lint-markers",
+                        "CodeMirror-linenumbers",
+                        "CodeMirror-foldgutter",
+                    ],
+                },
+                importModal: {
+                    visible: false,
+                    confirmLoading: false,
+                    link: '',
+                    groupName: 'default'
+                },
+                settingsModal: {
+                    visible: false,
+                    confirmLoading: false,
+                    testInterval: 4,
+                    testURL: 'https://www.google.com',
+                    testTimeout: 10,
+                    cleanupDays: 7,
+                    autoRoute: false,
+                    routeInterval: 4
+                },
+                groupModal: {
+                    visible: false
+                },
+                groupEditModal: {
+                    visible: false,
+                    confirmLoading: false,
+                    title: '',
+                    isEdit: false,
+                    groupName: '',
+                    oldGroupName: ''
+                },
+                subscriptions: [],
+                subscriptionModal: {
+                    visible: false
+                },
+                subscriptionEditModal: {
+                    visible: false,
+                    confirmLoading: false,
+                    title: '',
+                    isEdit: false,
+                    subscription: {
+                        id: 0,
+                        remark: '',
+                        url: '',
+                        groupName: 'default',
+                        enabled: true,
+                        updateInterval: 0,
+                        userAgent: ''
+                    }
+                },
+                cleanupQueue: [],
+                cleanupQueueLoaded: false,
+                cleanupColumns: [
+                    {
+                        title: '{{ i18n "remark" }}',
+                        dataIndex: 'remark',
+                        key: 'remark',
+                        scopedSlots: { customRender: 'remark' }
+                    },
+                    {
+                        title: '{{ i18n "pages.settings.outbound.failCount" }}',
+                        dataIndex: 'testFailCount',
+                        key: 'testFailCount',
+                        scopedSlots: { customRender: 'failCount' }
+                    },
+                    {
+                        title: '{{ i18n "pages.settings.outbound.lastTestTime" }}',
+                        dataIndex: 'lastTestTime',
+                        key: 'lastTestTime',
+                        scopedSlots: { customRender: 'lastTest' }
+                    },
+                    {
+                        title: '{{ i18n "pages.settings.outbound.daysUntilCleanup" }}',
+                        dataIndex: 'daysUntilCleanup',
+                        key: 'daysUntilCleanup',
+                        scopedSlots: { customRender: 'daysUntilCleanup' }
+                    }
+                ],
+                columns: [
+                    {
+                        title: '#',
+                        width: 60,
+                        customRender: (text, record, index) => {
+                            return index + 1;
+                        }
+                    },
+                    {
+                        title: '{{ i18n "pages.outbounds.remark" }}',
+                        dataIndex: 'remark',
+                    },
+                    {
+                        title: '{{ i18n "pages.outbounds.protocol" }}',
+                        dataIndex: 'protocol',
+                        scopedSlots: { customRender: 'protocol' },
+                        width: 100
+                    },
+                    {
+                        title: '{{ i18n "pages.outbounds.address" }}',
+                        scopedSlots: { customRender: 'address' },
+                    },
+                    {
+                        title: '{{ i18n "pages.outbounds.latency" }}',
+                        dataIndex: 'lastTestResult',
+                        scopedSlots: { customRender: 'testResult' },
+                        width: 100,
+                        sorter: (a, b) => {
+                            // Treat untested (0) and failed (-1) as highest values for sorting
+                            const aVal = a.lastTestResult <= 0 ? 999999 : a.lastTestResult;
+                            const bVal = b.lastTestResult <= 0 ? 999999 : b.lastTestResult;
+                            return aVal - bVal;
+                        },
+                        defaultSortOrder: 'ascend'
+                    },
+                    {
+                        title: '{{ i18n "pages.outbounds.lastTest" }}',
+                        scopedSlots: { customRender: 'lastTestTime' },
+                        width: 180
+                    },
+                    {
+                        title: '{{ i18n "operations" }}',
+                        scopedSlots: { customRender: 'action' },
+                        width: 150
+                    }
+                ]
+            },
+            computed: {
+                uniqueGroups() {
+                    // Get all unique group names from outbounds
+                    const groupsFromOutbounds = [...new Set(this.outbounds.map(o => o.groupName || 'default'))];
+                    // Merge with custom groups
+                    const allGroups = [...new Set([...groupsFromOutbounds, ...this.customGroups])];
+                    return allGroups.sort();
+                },
+                filteredOutbounds() {
+                    if (this.selectedGroup === 'all') {
+                        return this.searchedOutbounds;
+                    }
+                    return this.searchedOutbounds.filter(o => (o.groupName || 'default') === this.selectedGroup);
+                },
+                searchedOutbounds() {
+                    if (!this.searchKey) {
+                        return this.outbounds;
+                    }
+                    const key = this.searchKey.toLowerCase();
+                    return this.outbounds.filter(o =>
+                        o.remark.toLowerCase().includes(key) ||
+                        o.tag.toLowerCase().includes(key) ||
+                        o.address.toLowerCase().includes(key)
+                    );
+                },
+                testedCount() {
+                    return this.outbounds.filter(o => o.lastTestResult > 0).length;
+                },
+                bestOutbound() {
+                    const tested = this.outbounds.filter(o =>
+                        o.lastTestResult > 0 &&
+                        !o.isSystem &&
+                        o.tag !== 'direct' &&
+                        o.tag !== 'block' &&
+                        o.protocol !== 'freedom' &&
+                        o.protocol !== 'blackhole'
+                    );
+                    if (tested.length === 0) return null;
+                    return tested.reduce((best, current) =>
+                        current.lastTestResult < best.lastTestResult ? current : best
+                    );
+                },
+                allGroups() {
+                    // Get all unique group names
+                    const groups = [...new Set(this.outbounds.map(o => o.groupName || 'default'))];
+                    return groups.filter(g => g !== 'default'); // Exclude default as it's already in the selector
+                },
+                groupedOutbounds() {
+                    // Group outbounds by groupName
+                    const grouped = {};
+                    this.searchedOutbounds.forEach(outbound => {
+                        const group = outbound.groupName || 'default';
+                        if (!grouped[group]) {
+                            grouped[group] = [];
+                        }
+                        grouped[group].push(outbound);
+                    });
+                    return grouped;
+                },
+                groupList() {
+                    // Create list of groups with their counts for the group manager
+                    const groups = this.uniqueGroups.map(name => ({
+                        name: name,
+                        count: this.getGroupCount(name),
+                        isSystem: name === 'default'
+                    }));
+                    return groups;
+                }
+            },
+            methods: {
+                onSelectChange(selectedRowKeys) {
+                    this.selectedRowKeys = selectedRowKeys;
+                },
+                async testSelectedOutbounds() {
+                    if (this.selectedRowKeys.length === 0) return;
+
+                    this.$message.loading({ content: `Testing ${this.selectedRowKeys.length} outbound(s)...`, key: 'test', duration: 0 });
+
+                    // Set testing flag for all selected outbounds
+                    this.selectedRowKeys.forEach(id => {
+                        const index = this.outbounds.findIndex(o => o.id === id);
+                        if (index !== -1) {
+                            this.outbounds[index].testing = true;
+                        }
+                    });
+                    this.outbounds = [...this.outbounds]; // Force reactivity
+
+                    // Test all outbounds in parallel
+                    const testPromises = this.selectedRowKeys.map(async (id) => {
+                        const index = this.outbounds.findIndex(o => o.id === id);
+                        if (index === -1) return { success: false };
+
+                        try {
+                            const msg = await HttpUtil.post(`/xui/outbound/test/${id}`);
+                            if (msg.success) {
+                                // Update with test results
+                                this.outbounds[index].lastTestResult = msg.obj.latency;
+                                this.outbounds[index].lastTestTime = Math.floor(Date.now() / 1000);
+                                this.outbounds[index].testing = false;
+                                this.outbounds = [...this.outbounds]; // Force reactivity
+                                return { success: true };
+                            } else {
+                                // Mark as failed
+                                this.outbounds[index].lastTestResult = -1;
+                                this.outbounds[index].lastTestTime = Math.floor(Date.now() / 1000);
+                                this.outbounds[index].testing = false;
+                                this.outbounds = [...this.outbounds]; // Force reactivity
+                                return { success: false };
+                            }
+                        } catch (error) {
+                            console.error(`Failed to test outbound ${id}:`, error);
+                            // Mark as failed on exception
+                            this.outbounds[index].lastTestResult = -1;
+                            this.outbounds[index].lastTestTime = Math.floor(Date.now() / 1000);
+                            this.outbounds[index].testing = false;
+                            this.outbounds = [...this.outbounds]; // Force reactivity
+                            return { success: false };
+                        }
+                    });
+
+                    // Wait for all tests to complete
+                    const results = await Promise.all(testPromises);
+                    const successCount = results.filter(r => r.success).length;
+
+                    this.$message.success({ content: `Tested ${successCount}/${this.selectedRowKeys.length} outbound(s)`, key: 'test' });
+                },
+                async handleBulkGroupChange({ key }) {
+                    if (this.selectedRowKeys.length === 0) return;
+
+                    const groupName = key;
+                    this.$confirm({
+                        title: 'Move to Group',
+                        content: `Move ${this.selectedRowKeys.length} outbound(s) to group "${groupName}"?`,
+                        onOk: async () => {
+                            let successCount = 0;
+                            for (const id of this.selectedRowKeys) {
+                                const outbound = this.outbounds.find(o => o.id === id);
+                                if (outbound && !outbound.isSystem) {
+                                    try {
+                                        outbound.groupName = groupName;
+                                        await HttpUtil.post(`/xui/outbound/update/${id}`, outbound);
+                                        successCount++;
+                                    } catch (error) {
+                                        console.error(`Failed to update outbound ${id}:`, error);
+                                    }
+                                }
+                            }
+
+                            this.$message.success(`Moved ${successCount} outbound(s) to "${groupName}"`);
+                            this.selectedRowKeys = [];
+                            await this.getOutbounds();
+                        }
+                    });
+                },
+                async deleteSelectedOutbounds() {
+                    if (this.selectedRowKeys.length === 0) return;
+
+                    const nonSystemCount = this.selectedRowKeys.filter(id => {
+                        const outbound = this.outbounds.find(o => o.id === id);
+                        return outbound && !outbound.isSystem;
+                    }).length;
+
+                    if (nonSystemCount === 0) {
+                        this.$message.warning('No non-system outbounds selected');
+                        return;
+                    }
+
+                    this.$confirm({
+                        title: 'Delete Outbounds',
+                        content: `Are you sure you want to delete ${nonSystemCount} outbound(s)?`,
+                        okType: 'danger',
+                        onOk: async () => {
+                            let successCount = 0;
+                            for (const id of this.selectedRowKeys) {
+                                const outbound = this.outbounds.find(o => o.id === id);
+                                if (outbound && !outbound.isSystem) {
+                                    try {
+                                        await HttpUtil.post(`/xui/outbound/del/${id}`);
+                                        successCount++;
+                                    } catch (error) {
+                                        console.error(`Failed to delete outbound ${id}:`, error);
+                                    }
+                                }
+                            }
+
+                            this.$message.success(`Deleted ${successCount} outbound(s)`);
+                            this.selectedRowKeys = [];
+                            await this.getOutbounds();
+                        }
+                    });
+                },
+                openGroupManager() {
+                    this.groupModal.visible = true;
+                },
+                addNewGroup() {
+                    this.groupEditModal.isEdit = false;
+                    this.groupEditModal.title = 'Add New Group';
+                    this.groupEditModal.groupName = '';
+                    this.groupEditModal.oldGroupName = '';
+                    this.groupEditModal.visible = true;
+                },
+                editGroup(group) {
+                    this.groupEditModal.isEdit = true;
+                    this.groupEditModal.title = 'Edit Group';
+                    this.groupEditModal.groupName = group.name;
+                    this.groupEditModal.oldGroupName = group.name;
+                    this.groupEditModal.visible = true;
+                },
+                async deleteGroup(group) {
+                    const outboundsInGroup = this.outbounds.filter(o =>
+                        (o.groupName || 'default') === group.name
+                    );
+
+                    let content = `Are you sure you want to delete the group "${group.name}"?`;
+                    if (outboundsInGroup.length > 0) {
+                        content += `\n\nThis group contains ${outboundsInGroup.length} outbound(s). They will be moved to the "default" group.`;
+                    }
+
+                    this.$confirm({
+                        title: 'Delete Group',
+                        content: content,
+                        okType: 'danger',
+                        onOk: async () => {
+                            try {
+                                // Move all outbounds in this group to 'default'
+                                for (const outbound of outboundsInGroup) {
+                                    outbound.groupName = 'default';
+                                    await HttpUtil.post(`/xui/outbound/update/${outbound.id}`, outbound);
+                                }
+
+                                // Remove from custom groups if it exists there
+                                const customIndex = this.customGroups.indexOf(group.name);
+                                if (customIndex !== -1) {
+                                    this.customGroups.splice(customIndex, 1);
+                                    localStorage.setItem('xui-custom-groups', JSON.stringify(this.customGroups));
+                                }
+
+                                this.$message.success(`Group "${group.name}" deleted successfully`);
+                                this.groupModal.visible = false;
+                                await this.getOutbounds();
+                            } catch (error) {
+                                this.$message.error('Failed to delete group: ' + error.message);
+                            }
+                        }
+                    });
+                },
+                async saveGroup() {
+                    const groupName = this.groupEditModal.groupName.trim();
+                    if (!groupName) {
+                        this.$message.error('Group name cannot be empty');
+                        return;
+                    }
+
+                    // Check if group name already exists (except when editing)
+                    if (!this.groupEditModal.isEdit && this.uniqueGroups.includes(groupName)) {
+                        this.$message.error('Group name already exists');
+                        return;
+                    }
+
+                    this.groupEditModal.confirmLoading = true;
+                    try {
+                        if (this.groupEditModal.isEdit) {
+                            // Rename group - update all outbounds with old group name
+                            const outboundsToUpdate = this.outbounds.filter(o =>
+                                (o.groupName || 'default') === this.groupEditModal.oldGroupName
+                            );
+
+                            for (const outbound of outboundsToUpdate) {
+                                outbound.groupName = groupName;
+                                await HttpUtil.post(`/xui/outbound/update/${outbound.id}`, outbound);
+                            }
+
+                            // Update custom groups if the old name was in there
+                            const customIndex = this.customGroups.indexOf(this.groupEditModal.oldGroupName);
+                            if (customIndex !== -1) {
+                                this.customGroups[customIndex] = groupName;
+                            }
+
+                            this.$message.success('Group renamed successfully');
+                        } else {
+                            // New group - add to custom groups array
+                            this.customGroups.push(groupName);
+                            // Save to localStorage for persistence
+                            localStorage.setItem('xui-custom-groups', JSON.stringify(this.customGroups));
+                            this.$message.success(`Group "${groupName}" created! You can now assign outbounds to it.`);
+                        }
+
+                        this.groupEditModal.visible = false;
+                        this.groupModal.visible = false;
+                        await this.getOutbounds();
+                    } finally {
+                        this.groupEditModal.confirmLoading = false;
+                    }
+                },
+                getGroupCount(groupName) {
+                    return this.outbounds.filter(o => (o.groupName || 'default') === groupName).length;
+                },
+                async moveToGroup(outbound, groupName) {
+                    this.spinning = true;
+                    try {
+                        outbound.groupName = groupName;
+                        const msg = await HttpUtil.postWithModal(`/xui/outbound/update/${outbound.id}`, outbound);
+                        if (msg.success) {
+                            this.$message.success(`Moved to ${groupName} group`);
+                            await this.getOutbounds();
+                        }
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                async moveToNewGroup(outbound) {
+                    const groupName = prompt('Enter new group name:');
+                    if (!groupName || groupName.trim() === '') {
+                        this.$message.error('Group name cannot be empty');
+                        return;
+                    }
+                    await this.moveToGroup(outbound, groupName.trim());
+                },
+                // Subscription methods
+                openSubscriptionManager() {
+                    this.subscriptionModal.visible = true;
+                    this.getSubscriptions();
+                },
+                async getSubscriptions() {
+                    this.spinning = true;
+                    try {
+                        const msg = await HttpUtil.postWithModal('/xui/subscription/list');
+                        if (msg.success) {
+                            this.subscriptions = (msg.obj || []).map(sub => ({
+                                ...sub,
+                                refreshing: false
+                            }));
+                        }
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                addNewSubscription() {
+                    this.subscriptionEditModal.isEdit = false;
+                    this.subscriptionEditModal.title = 'Add New Subscription';
+                    this.subscriptionEditModal.subscription = {
+                        id: 0,
+                        remark: '',
+                        url: '',
+                        groupName: this.selectedGroup === 'all' ? 'default' : this.selectedGroup,
+                        enabled: true,
+                        updateInterval: 0,
+                        userAgent: ''
+                    };
+                    this.subscriptionEditModal.visible = true;
+                },
+                editSubscription(subscription) {
+                    this.subscriptionEditModal.isEdit = true;
+                    this.subscriptionEditModal.title = 'Edit Subscription';
+                    this.subscriptionEditModal.subscription = JSON.parse(JSON.stringify(subscription));
+                    this.subscriptionEditModal.visible = true;
+                },
+                async saveSubscription() {
+                    const sub = this.subscriptionEditModal.subscription;
+
+                    // Validate
+                    if (!sub.remark || !sub.url || !sub.groupName) {
+                        this.$message.error('Remark, URL, and Group are required');
+                        return;
+                    }
+
+                    this.subscriptionEditModal.confirmLoading = true;
+                    try {
+                        const url = this.subscriptionEditModal.isEdit
+                            ? `/xui/subscription/update/${sub.id}`
+                            : '/xui/subscription/add';
+
+                        const msg = await HttpUtil.postWithModal(url, sub);
+                        if (msg.success) {
+                            this.$message.success(this.subscriptionEditModal.isEdit
+                                ? 'Subscription updated successfully'
+                                : 'Subscription added successfully');
+                            this.subscriptionEditModal.visible = false;
+                            await this.getSubscriptions();
+                        }
+                    } finally {
+                        this.subscriptionEditModal.confirmLoading = false;
+                    }
+                },
+                async deleteSubscription(subscription) {
+                    this.$confirm({
+                        title: 'Delete Subscription',
+                        content: `Are you sure you want to delete subscription "${subscription.remark}"? This will not delete outbounds created from this subscription.`,
+                        okType: 'danger',
+                        onOk: async () => {
+                            this.spinning = true;
+                            try {
+                                const msg = await HttpUtil.postWithModal(`/xui/subscription/delete/${subscription.id}`);
+                                if (msg.success) {
+                                    this.$message.success('Subscription deleted successfully');
+                                    await this.getSubscriptions();
+                                }
+                            } finally {
+                                this.spinning = false;
+                            }
+                        }
+                    });
+                },
+                async refreshSubscription(subscription) {
+                    // Set refreshing state for this subscription
+                    this.$set(subscription, 'refreshing', true);
+
+                    try {
+                        const msg = await HttpUtil.postWithModal(`/xui/subscription/refresh/${subscription.id}`);
+                        if (msg.success) {
+                            const addedCount = msg.obj || 0;
+                            this.$message.success(`Subscription refreshed successfully! Added ${addedCount} outbound(s).`);
+                            await this.getSubscriptions();
+                            await this.getOutbounds();
+                        }
+                    } finally {
+                        this.$set(subscription, 'refreshing', false);
+                    }
+                },
+                async getOutbounds() {
+                    this.spinning = true;
+                    try {
+                        const msg = await HttpUtil.postWithModal('/xui/outbound/list');
+                        if (msg.success) {
+                            this.outbounds = msg.obj || [];
+
+                            // Clean up customGroups - remove groups that are now used by outbounds
+                            const groupsFromOutbounds = [...new Set(this.outbounds.map(o => o.groupName || 'default'))];
+                            this.customGroups = this.customGroups.filter(g => !groupsFromOutbounds.includes(g));
+                            localStorage.setItem('xui-custom-groups', JSON.stringify(this.customGroups));
+                        }
+
+                        // Fetch auto-route setting
+                        const settingsMsg = await HttpUtil.post('/xui/setting/all');
+                        if (settingsMsg.success && settingsMsg.obj) {
+                            this.autoRouteEnabled = settingsMsg.obj.outboundAutoRoute || false;
+                        }
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                async getXrayError() {
+                    try {
+                        const msg = await HttpUtil.get('/server/xrayError');
+                        if (msg.success && msg.obj) {
+                            this.xrayError = msg.obj;
+                        } else {
+                            this.xrayError = null;
+                        }
+                    } catch (error) {
+                        console.error('Failed to get Xray error:', error);
+                        this.xrayError = null;
+                    }
+                },
+                async migrateVLESSOutbounds() {
+                    this.migrating = true;
+                    try {
+                        const msg = await HttpUtil.post('/xui/outbound/migrateVLESS', {});
+                        if (msg.success) {
+                            this.$message.success('Migration completed successfully! Restarting Xray...');
+                            // Restart Xray
+                            await this.restartXray();
+                            // Reload outbounds
+                            await this.getOutbounds();
+                            // Clear error
+                            this.xrayError = null;
+                        } else {
+                            this.$message.error(msg.msg || 'Migration failed');
+                        }
+                    } catch (error) {
+                        console.error('Migration failed:', error);
+                        this.$message.error('Migration failed: ' + error.toString());
+                    } finally {
+                        this.migrating = false;
+                    }
+                },
+                openAddOutbound() {
+                    const self = this;
+                    const existingTags = this.outbounds.map(o => o.tag);
+                    outModal.show({
+                        title: '{{ i18n "pages.outbounds.addOutbound" }}',
+                        okText: '{{ i18n "pages.inbounds.create"}}',
+                        tags: existingTags,
+                        confirm: async (outboundJson) => {
+                            outModal.loading(true);
+                            try {
+                                const dbOutbound = {
+                                    protocol: outboundJson.protocol,
+                                    address: outboundJson.settings.address || '',
+                                    port: outboundJson.settings.port || 443,
+                                    settings: JSON.stringify(outboundJson.settings),
+                                    streamSettings: JSON.stringify(outboundJson.streamSettings),
+                                    tag: outboundJson.tag,
+                                    remark: outboundJson.tag,
+                                    groupName: 'default',
+                                    enable: true
+                                };
+
+                                const msg = await HttpUtil.postWithModal('/xui/outbound/add', dbOutbound);
+                                if (msg.success) {
+                                    outModal.close();
+                                    await self.getOutbounds();
+                                }
+                            } finally {
+                                outModal.loading(false);
+                            }
+                        },
+                        isEdit: false
+                    });
+                },
+                editOutbound(outbound) {
+                    const self = this;
+                    const existingTags = this.outbounds.filter(o => o.id !== outbound.id).map(o => o.tag);
+
+                    let settings = {};
+                    let streamSettings = {};
+                    try {
+                        settings = JSON.parse(outbound.settings || '{}');
+                        streamSettings = JSON.parse(outbound.streamSettings || '{}');
+                    } catch (e) {
+                        console.error('Failed to parse outbound settings:', e);
+                    }
+
+                    const outboundJson = {
+                        tag: outbound.tag,
+                        protocol: outbound.protocol,
+                        settings: settings,
+                        streamSettings: streamSettings,
+                        sendThrough: outbound.sendThrough,
+                        mux: settings.mux || {}
+                    };
+
+                    outModal.show({
+                        title: '{{ i18n "pages.outbounds.editOutbound" }}',
+                        okText: '{{ i18n "pages.inbounds.update"}}',
+                        outbound: outboundJson,
+                        tags: existingTags,
+                        confirm: async (editedJson) => {
+                            outModal.loading(true);
+                            try {
+                                const dbOutbound = {
+                                    id: outbound.id,
+                                    protocol: editedJson.protocol,
+                                    address: editedJson.settings.address || outbound.address,
+                                    port: editedJson.settings.port || outbound.port,
+                                    settings: JSON.stringify(editedJson.settings),
+                                    streamSettings: JSON.stringify(editedJson.streamSettings),
+                                    tag: editedJson.tag,
+                                    remark: outbound.remark,
+                                    groupName: outbound.groupName,
+                                    enable: outbound.enable
+                                };
+
+                                const msg = await HttpUtil.postWithModal(`/xui/outbound/update/${outbound.id}`, dbOutbound);
+                                if (msg.success) {
+                                    outModal.close();
+                                    await self.getOutbounds();
+                                }
+                            } finally {
+                                outModal.loading(false);
+                            }
+                        },
+                        isEdit: true
+                    });
+                },
+                filterGroupOption(inputValue, option) {
+                    return option.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1;
+                },
+                async deleteOutbound(outbound) {
+                    this.$confirm({
+                        title: '{{ i18n "pages.outbounds.confirmDelete" }}',
+                        content: `${outbound.remark} (${outbound.tag})`,
+                        okType: 'danger',
+                        onOk: async () => {
+                            const msg = await HttpUtil.postWithModal(`/xui/outbound/del/${outbound.id}`);
+                            if (msg.success) {
+                                await this.getOutbounds();
+                            }
+                        }
+                    });
+                },
+                async testOutbound(outbound) {
+                    // Find the outbound in the array to ensure we're updating the correct reference
+                    const index = this.outbounds.findIndex(o => o.id === outbound.id);
+                    if (index === -1) return;
+
+                    // Set testing flag
+                    outbound.testing = true;
+                    this.outbounds = [...this.outbounds]; // Force reactivity
+
+                    try {
+                        const msg = await HttpUtil.postWithModal(`/xui/outbound/test/${outbound.id}`);
+                        console.log('Test response:', msg);
+                        if (msg.success) {
+                            // Update the outbound in the array with test results
+                            console.log('Setting lastTestResult to:', msg.obj.latency);
+                            this.outbounds[index].lastTestResult = msg.obj.latency;
+                            this.outbounds[index].lastTestTime = Math.floor(Date.now() / 1000);
+                            this.outbounds = [...this.outbounds]; // Force reactivity
+                            this.$message.success(`Latency: ${msg.obj.latency}ms`);
+                        } else {
+                            // Mark as failed
+                            console.log('Test failed, setting lastTestResult to -1');
+                            this.outbounds[index].lastTestResult = -1;
+                            this.outbounds[index].lastTestTime = Math.floor(Date.now() / 1000);
+                            this.outbounds = [...this.outbounds]; // Force reactivity
+                            this.$message.error(msg.msg || 'Test failed');
+                        }
+                    } catch (e) {
+                        // Mark as failed on exception
+                        console.log('Test exception:', e);
+                        this.outbounds[index].lastTestResult = -1;
+                        this.outbounds[index].lastTestTime = Math.floor(Date.now() / 1000);
+                        this.outbounds = [...this.outbounds]; // Force reactivity
+                        this.$message.error('Test request failed: ' + e.message);
+                    } finally {
+                        // Clear testing flag
+                        console.log('Final lastTestResult:', this.outbounds[index].lastTestResult);
+                        console.log('Final lastTestTime:', this.outbounds[index].lastTestTime);
+                        this.outbounds[index].testing = false;
+                        this.outbounds = [...this.outbounds]; // Force reactivity
+                    }
+                },
+                async testOutboundById(id) {
+                    // Helper method for bulk testing without spinning indicator
+                    const msg = await HttpUtil.post(`/xui/outbound/test/${id}`);
+                    if (!msg.success) {
+                        throw new Error(msg.msg || 'Test failed');
+                    }
+                    return msg;
+                },
+                async testAllOutbounds() {
+                    this.spinning = true;
+                    try {
+                        const msg = await HttpUtil.postWithModal('/xui/outbound/testAll');
+                        if (msg.success) {
+                            this.$message.success('Tests completed');
+                            await this.getOutbounds();
+                        }
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                openImportOutbound() {
+                    this.importModal.link = '';
+                    this.importModal.groupName = 'default';
+                    this.importModal.visible = true;
+                },
+                async importOutbound() {
+                    if (!this.importModal.link) {
+                        this.$message.error('Please enter a valid link');
+                        return;
+                    }
+
+                    console.log('Import - Selected group:', this.importModal.groupName);
+
+                    this.importModal.confirmLoading = true;
+                    try {
+                        // Split by various separators: newline, comma, semicolon, space
+                        const links = this.importModal.link
+                            .split(/[\n,;\s]+/)
+                            .map(link => link.trim())
+                            .filter(link => link.length > 0);
+
+                        let successCount = 0;
+                        let failCount = 0;
+
+                        for (const link of links) {
+                            try {
+                                console.log('Importing link to group:', this.importModal.groupName, 'link:', link);
+
+                                // Use URLSearchParams to properly encode form data
+                                const formData = new URLSearchParams();
+                                formData.append('link', link);
+                                formData.append('groupName', this.importModal.groupName || 'default');
+
+                                // Use fetch API to bypass axios interceptor completely
+                                const response = await fetch('/xui/outbound/import', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded'
+                                    },
+                                    body: formData.toString()
+                                });
+                                const data = await response.json();
+                                console.log('Import response:', data);
+                                if (data.success) {
+                                    successCount++;
+                                } else {
+                                    failCount++;
+                                }
+                            } catch (error) {
+                                console.error('Import error:', error);
+                                failCount++;
+                            }
+                        }
+
+                        if (successCount > 0) {
+                            this.$message.success(`Successfully imported ${successCount} outbound(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+                            this.importModal.visible = false;
+                            await this.getOutbounds();
+                        } else {
+                            this.$message.error('Failed to import any outbounds');
+                        }
+                    } finally {
+                        this.importModal.confirmLoading = false;
+                    }
+                },
+                getLatencyColor(latency) {
+                    if (latency < 100) return 'green';
+                    if (latency < 300) return 'orange';
+                    return 'red';
+                },
+                formatDate(timestamp) {
+                    if (!timestamp) return 'N/A';
+                    const date = typeof timestamp === 'number' ? new Date(timestamp * 1000) : new Date(timestamp);
+                    return date.toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                },
+                async openSettings() {
+                    // Load current settings from server
+                    this.spinning = true;
+                    try {
+                        const msg = await HttpUtil.post('/xui/setting/all');
+                        if (msg.success) {
+                            const settings = msg.obj;
+                            // Store all settings for saving later
+                            this.allSettings = settings;
+                            this.settingsModal.testInterval = settings.outboundTestInterval || 4;
+                            this.settingsModal.testURL = settings.outboundTestURL || 'https://www.google.com';
+                            this.settingsModal.testTimeout = settings.outboundTestTimeout || 10;
+                            this.settingsModal.cleanupDays = settings.outboundCleanupDays || 7;
+                            this.settingsModal.autoRoute = settings.outboundAutoRoute || false;
+                            this.settingsModal.routeInterval = settings.outboundRouteInterval || 4;
+                            this.autoRouteEnabled = settings.outboundAutoRoute || false;
+                        }
+                        this.settingsModal.visible = true;
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                async saveSettings() {
+                    this.settingsModal.confirmLoading = true;
+                    try {
+                        // Debug logging
+                        console.log('allSettings:', this.allSettings);
+                        console.log('allSettings.webPort:', this.allSettings?.webPort);
+
+                        // Merge updated test settings only (auto-route is now on the page)
+                        const settings = Object.assign({}, this.allSettings, {
+                            outboundTestInterval: this.settingsModal.testInterval,
+                            outboundTestURL: this.settingsModal.testURL,
+                            outboundTestTimeout: this.settingsModal.testTimeout,
+                            outboundCleanupDays: this.settingsModal.cleanupDays
+                        });
+
+                        console.log('merged settings.webPort:', settings.webPort);
+
+                        const msg = await HttpUtil.post('/xui/setting/update', settings);
+                        if (msg.success) {
+                            this.$message.success('{{ i18n "pages.settings.save" }} {{ i18n "success" }}');
+                            this.settingsModal.visible = false;
+                        }
+                    } finally {
+                        this.settingsModal.confirmLoading = false;
+                    }
+                },
+                async loadCleanupQueue() {
+                    this.spinning = true;
+                    try {
+                        const msg = await HttpUtil.get("/xui/outbound/list");
+                        if (msg.success) {
+                            const now = new Date().getTime();
+                            const cleanupThresholdMs = (this.settingsModal.cleanupDays || 7) * 24 * 60 * 60 * 1000;
+
+                            // Filter outbounds that have failed tests and are approaching cleanup
+                            this.cleanupQueue = msg.obj
+                                .filter(outbound => {
+                                    if (!outbound.lastTestTime || outbound.testFailCount === 0) return false;
+
+                                    const lastTestTime = new Date(outbound.lastTestTime).getTime();
+                                    const timeSinceLastFail = now - lastTestTime;
+
+                                    // Show items that are within the cleanup threshold
+                                    return timeSinceLastFail > 0 && timeSinceLastFail < cleanupThresholdMs;
+                                })
+                                .map(outbound => {
+                                    const lastTestTime = new Date(outbound.lastTestTime).getTime();
+                                    const timeSinceLastFail = now - lastTestTime;
+                                    const daysUntilCleanup = Math.ceil((cleanupThresholdMs - timeSinceLastFail) / (24 * 60 * 60 * 1000));
+
+                                    return {
+                                        ...outbound,
+                                        daysUntilCleanup: Math.max(0, daysUntilCleanup)
+                                    };
+                                })
+                                .sort((a, b) => a.daysUntilCleanup - b.daysUntilCleanup);
+
+                            this.cleanupQueueLoaded = true;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load cleanup queue:', error);
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                getDaysColor(days) {
+                    if (days <= 1) return 'red';
+                    if (days <= 3) return 'orange';
+                    return 'blue';
+                },
+                async toggleAutoRoute() {
+                    this.spinning = true;
+                    try {
+                        // Load current settings
+                        const settingsMsg = await HttpUtil.post('/xui/setting/all');
+                        if (!settingsMsg.success) {
+                            this.$message.error('Failed to load settings');
+                            this.autoRouteEnabled = !this.autoRouteEnabled;  // Revert
+                            return;
+                        }
+
+                        // Update only the auto-route setting
+                        const settings = Object.assign({}, settingsMsg.obj, {
+                            outboundAutoRoute: this.autoRouteEnabled
+                        });
+
+                        const msg = await HttpUtil.post('/xui/setting/update', settings);
+
+                        if (msg.success) {
+                            this.$message.success(this.autoRouteEnabled ? 'Auto-routing enabled' : 'Auto-routing disabled');
+                            if (this.autoRouteEnabled) {
+                                // Load the best outbound
+                                await this.loadBestOutbound();
+                            } else {
+                                this.bestOutbound = null;
+                            }
+                            // Restart xray to apply routing changes
+                            await this.restartXray();
+                        } else {
+                            // Revert on failure
+                            this.autoRouteEnabled = !this.autoRouteEnabled;
+                            this.$message.error('Failed to update auto-routing');
+                        }
+                    } finally {
+                        this.spinning = false;
+                    }
+                },
+                async saveRouteInterval() {
+                    try {
+                        // Load current settings
+                        const settingsMsg = await HttpUtil.post('/xui/setting/all');
+                        if (!settingsMsg.success) return;
+
+                        // Update route interval
+                        const settings = Object.assign({}, settingsMsg.obj, {
+                            outboundRouteInterval: this.routeInterval
+                        });
+
+                        const msg = await HttpUtil.post('/xui/setting/update', settings);
+
+                        if (msg.success) {
+                            this.$message.success('Route interval updated');
+                        }
+                    } catch (error) {
+                        console.error('Failed to save route interval:', error);
+                    }
+                },
+                async loadBestOutbound() {
+                    try {
+                        const msg = await HttpUtil.post('/xui/outbound/getBest');
+                        if (msg.success && msg.obj) {
+                            this.bestOutbound = msg.obj.tag;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load best outbound:', error);
+                    }
+                },
+                async restartXray() {
+                    this.spinning = true;
+                    const msg = await HttpUtil.post("server/restartXrayService");
+                    if (msg.success) {
+                        this.$message.success('Xray restarted successfully');
+                    }
+                    this.spinning = false;
+                }
+            },
+            async mounted() {
+                // Load custom groups from localStorage
+                const savedGroups = localStorage.getItem('xui-custom-groups');
+                if (savedGroups) {
+                    try {
+                        this.customGroups = JSON.parse(savedGroups);
+                    } catch (e) {
+                        console.error('Failed to parse custom groups:', e);
+                        this.customGroups = [];
+                    }
+                }
+
+                this.getOutbounds();
+                this.getXrayError();  // Check for Xray configuration errors
+
+                // Load auto-route settings
+                try {
+                    const msg = await HttpUtil.post('/xui/setting/all');
+                    if (msg.success) {
+                        this.autoRouteEnabled = msg.obj.outboundAutoRoute || false;
+                        this.routeInterval = msg.obj.outboundRouteInterval || 4;
+                        if (this.autoRouteEnabled) {
+                            this.loadBestOutbound();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to load auto-route settings:', error);
+                }
+            }
+        });
+    </script>
+
+    <!-- Include Advanced Outbound Modal Template -->
+    {{template "outModal"}}
+</body>
+
+</html>

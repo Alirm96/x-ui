@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+{{template "head" .}}
+<style>
+    .version-card {
+        text-align: center;
+        padding: 30px;
+    }
+
+    .version-number {
+        font-size: 48px;
+        font-weight: bold;
+        color: #1890ff;
+        margin: 20px 0;
+    }
+
+    .version-status {
+        font-size: 18px;
+        margin: 10px 0;
+    }
+
+    .update-info {
+        margin: 30px 0;
+        text-align: left;
+    }
+
+    .changelog {
+        max-height: 400px;
+        overflow-y: auto;
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 4px;
+        margin-top: 15px;
+    }
+
+    .progress-container {
+        margin: 20px 0;
+    }
+</style>
+
+<body>
+    <a-layout id="app" v-cloak :class="themeSwitcher.currentTheme">
+        {{ template "commonSider" . }}
+        <a-layout id="content-layout">
+            <a-layout-content>
+                <a-spin :spinning="spinning" :delay="500" tip='{{ i18n "loading"}}'>
+                    <a-card hoverable style="margin-bottom: 20px;">
+                        <template slot="title">
+                            <a-icon type="cloud-download"></a-icon> {{ i18n "pages.update.title" }}
+                        </template>
+                        <template slot="extra">
+                            <a-space>
+                                <a-switch v-model="includePrerelease" @change="onPrereleaseChange">
+                                    <template slot="checkedChildren">{{ i18n "pages.update.prerelease" }}</template>
+                                    <template slot="unCheckedChildren">{{ i18n "pages.update.stable" }}</template>
+                                </a-switch>
+                                <a-button type="primary" icon="sync" @click="checkForUpdates" :loading="checking">
+                                    {{ i18n "pages.update.check" }}
+                                </a-button>
+                            </a-space>
+                        </template>
+
+                        <!-- Current Version -->
+                        <a-row :gutter="16">
+                            <a-col :xs="24" :sm="12">
+                                <a-card class="version-card">
+                                    <div class="version-status">{{ i18n "pages.update.currentVersion" }}</div>
+                                    <div class="version-number">[[ currentVersion || 'Loading...' ]]</div>
+                                </a-card>
+                            </a-col>
+
+                            <!-- Latest Version -->
+                            <a-col :xs="24" :sm="12">
+                                <a-card class="version-card">
+                                    <div class="version-status">{{ i18n "pages.update.latestVersion" }}</div>
+                                    <div class="version-number"
+                                        :style="{ color: latestVersion ? '#52c41a' : '#d9d9d9' }">
+                                        [[ latestVersion || 'N/A' ]]
+                                    </div>
+                                    <a-tag v-if="hasUpdate" color="green" style="font-size: 14px;">
+                                        <a-icon type="arrow-up"></a-icon> {{ i18n "pages.update.available" }}
+                                    </a-tag>
+                                    <a-tag v-else-if="latestVersion" color="blue" style="font-size: 14px;">
+                                        <a-icon type="check-circle"></a-icon> {{ i18n "pages.update.upToDate" }}
+                                    </a-tag>
+                                </a-card>
+                            </a-col>
+                        </a-row>
+
+                        <!-- Update Information -->
+                        <div v-if="updateInfo" class="update-info">
+                            <a-divider>{{ i18n "pages.update.information" }}</a-divider>
+
+                            <a-descriptions bordered :column="{ xs: 1, sm: 2 }">
+                                <a-descriptions-item label='{{ i18n "pages.update.releaseDate" }}'>
+                                    [[ formatDate(updateInfo.releaseDate) ]]
+                                </a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "pages.update.downloadSize" }}'>
+                                    [[ formatSize(updateInfo.size) ]]
+                                </a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "pages.update.releaseUrl" }}' :span="2">
+                                    <a :href="updateInfo.releaseUrl" target="_blank">
+                                        [[ updateInfo.releaseUrl ]]
+                                        <a-icon type="export"></a-icon>
+                                    </a>
+                                </a-descriptions-item>
+                            </a-descriptions>
+
+                            <!-- Changelog -->
+                            <div v-if="updateInfo.changelog" style="margin-top: 20px;">
+                                <h3>{{ i18n "pages.update.changelog" }}</h3>
+                                <div class="changelog" v-html="renderMarkdown(updateInfo.changelog)"></div>
+                            </div>
+
+                            <!-- Update Button -->
+                            <div v-if="hasUpdate" style="margin-top: 20px; text-align: center;">
+                                <a-alert v-if="!downloadInProgress && !downloadError" type="warning" show-icon
+                                    style="margin-bottom: 15px;">
+                                    <template slot="message">
+                                        {{ i18n "pages.update.warning" }}
+                                    </template>
+                                </a-alert>
+
+                                <a-button v-if="!downloadInProgress" type="primary" size="large" icon="download"
+                                    @click="downloadAndInstall" :disabled="!updateInfo.downloadUrl">
+                                    {{ i18n "pages.update.downloadInstall" }}
+                                </a-button>
+
+                                <!-- Download Progress -->
+                                <div v-if="downloadInProgress" class="progress-container">
+                                    <a-progress :percent="parseFloat(downloadProgress.percentage)" status="active">
+                                    </a-progress>
+                                    <div style="text-align: center; margin-top: 10px;">
+                                        [[ formatSize(downloadProgress.downloaded) ]] / [[
+                                        formatSize(downloadProgress.total) ]]
+                                    </div>
+                                </div>
+
+                                <!-- Download Error -->
+                                <a-alert v-if="downloadError" type="error" show-icon closable
+                                    @close="downloadError = ''">
+                                    <template slot="message">
+                                        {{ i18n "pages.update.error" }}: [[ downloadError ]]
+                                    </template>
+                                </a-alert>
+
+                                <!-- Download Success -->
+                                <a-result v-if="downloadSuccess" status="success"
+                                    title='{{ i18n "pages.update.successTitle" }}'
+                                    sub-title='{{ i18n "pages.update.successMessage" }}'>
+                                    <template slot="extra">
+                                        <a-button type="primary" @click="restartXray">
+                                            {{ i18n "pages.xray.restart" }}
+                                        </a-button>
+                                    </template>
+                                </a-result>
+                            </div>
+                        </div>
+                    </a-card>
+                </a-spin>
+            </a-layout-content>
+        </a-layout>
+    </a-layout>
+
+    {{template "js" .}}
+    {{template "component/themeSwitcher" .}}
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        const app = new Vue({
+            delimiters: ['[[', ']]'],
+            el: '#app',
+            data: {
+                siderDrawer,
+                themeSwitcher,
+                spinning: false,
+                checking: false,
+                currentVersion: null,
+                latestVersion: null,
+                hasUpdate: false,
+                updateInfo: null,
+                includePrerelease: false,
+                downloadInProgress: false,
+                downloadSuccess: false,
+                downloadError: '',
+                downloadProgress: {
+                    downloaded: 0,
+                    total: 0,
+                    percentage: '0'
+                },
+                progressInterval: null,
+            },
+            methods: {
+                loading(spinning = true) {
+                    this.spinning = spinning;
+                },
+                async getCurrentVersion() {
+                    this.loading(true);
+                    const msg = await HttpUtil.get("/xui/update/current-version");
+                    this.loading(false);
+                    if (msg.success) {
+                        this.currentVersion = msg.obj.version;
+                    } else {
+                        this.$message.error(msg.msg);
+                    }
+                },
+                async checkForUpdates() {
+                    this.checking = true;
+                    const msg = await HttpUtil.post("/xui/update/check", {
+                        includePrerelease: this.includePrerelease
+                    });
+                    this.checking = false;
+
+                    if (msg.success) {
+                        this.updateInfo = msg.obj;
+                        this.latestVersion = this.updateInfo.latest;
+                        this.hasUpdate = this.updateInfo.hasUpdate;
+
+                        if (this.hasUpdate) {
+                            this.$message.success('{{ i18n "pages.update.newVersionAvailable" }}');
+                        } else {
+                            this.$message.info('{{ i18n "pages.update.upToDate" }}');
+                        }
+                    } else {
+                        this.$message.error(msg.msg);
+                    }
+                },
+                async downloadAndInstall() {
+                    if (!this.updateInfo || !this.updateInfo.downloadUrl) {
+                        this.$message.error('{{ i18n "pages.update.noDownloadUrl" }}');
+                        return;
+                    }
+
+                    this.downloadInProgress = true;
+                    this.downloadSuccess = false;
+                    this.downloadError = '';
+
+                    const msg = await HttpUtil.post("/xui/update/download", {
+                        downloadUrl: this.updateInfo.downloadUrl
+                    });
+
+                    if (msg.success) {
+                        // Start polling for progress
+                        this.progressInterval = setInterval(async () => {
+                            await this.getDownloadProgress();
+                        }, 1000);
+                    } else {
+                        this.downloadInProgress = false;
+                        this.downloadError = msg.msg;
+                    }
+                },
+                async getDownloadProgress() {
+                    const msg = await HttpUtil.get("/xui/update/progress");
+
+                    if (msg.success) {
+                        this.downloadProgress = msg.obj;
+
+                        if (!msg.obj.inProgress) {
+                            // Download finished
+                            clearInterval(this.progressInterval);
+                            this.downloadInProgress = false;
+
+                            if (msg.obj.error) {
+                                this.downloadError = msg.obj.error;
+                            } else {
+                                this.downloadSuccess = true;
+                                // Refresh current version
+                                await this.getCurrentVersion();
+                            }
+                        }
+                    }
+                },
+                async restartXray() {
+                    this.loading(true);
+                    const msg = await HttpUtil.post("/server/restartXrayService");
+                    if (msg.success) {
+                        this.$message.success('{{ i18n "pages.xray.restartSuccess" }}');
+                        await PromiseUtil.sleep(1000);
+                        window.location.reload();
+                    }
+                    this.loading(false);
+                },
+                onPrereleaseChange() {
+                    // Auto-check when prerelease toggle changes
+                    if (this.updateInfo) {
+                        this.checkForUpdates();
+                    }
+                },
+                formatDate(dateStr) {
+                    if (!dateStr) return 'N/A';
+                    const date = new Date(dateStr);
+                    return date.toLocaleString();
+                },
+                formatSize(bytes) {
+                    if (!bytes || bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+                },
+                renderMarkdown(text) {
+                    if (!text) return '';
+                    if (typeof marked !== 'undefined') {
+                        return marked.parse(text);
+                    }
+                    return text.replace(/\n/g, '<br>');
+                },
+            },
+            async mounted() {
+                await this.getCurrentVersion();
+            },
+            beforeDestroy() {
+                if (this.progressInterval) {
+                    clearInterval(this.progressInterval);
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

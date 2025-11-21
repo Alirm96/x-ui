@@ -1,0 +1,103 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "go.toolsManagement.autoUpdate": true
+    },
+    "extensions": {
+        "recommendations": [
+            "golang.go",
+            "ms-azuretools.vscode-docker",
+            "tamasfe.even-better-toml",
+            "redhat.vscode-yaml",
+            "dbaeumer.vscode-eslint",
+            "esbenp.prettier-vscode"
+        ]
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [
+            {
+                "name": "Debug X-UI",
+                "type": "go",
+                "request": "launch",
+                "mode": "debug",
+                "program": "${workspaceFolder}/main.go",
+                "env": {
+                    "XUI_DEBUG": "true",
+                    "GIN_MODE": "debug",
+                    "CGO_ENABLED": "1"
+                },
+                "args": []
+            },
+            {
+                "name": "Attach to Docker Container",
+                "type": "go",
+                "request": "attach",
+                "mode": "remote",
+                "remotePath": "/app",
+                "port": 2345,
+                "host": "localhost"
+            }
+        ]
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "Start Dev Environment",
+                "type": "shell",
+                "command": "make dev-up",
+                "problemMatcher": [],
+                "group": {
+                    "kind": "build",
+                    "isDefault": false
+                }
+            },
+            {
+                "label": "Stop Dev Environment",
+                "type": "shell",
+                "command": "make dev-down",
+                "problemMatcher": []
+            },
+            {
+                "label": "View Logs",
+                "type": "shell",
+                "command": "make dev-logs",
+                "problemMatcher": [],
+                "isBackground": true
+            },
+            {
+                "label": "Restart Dev Environment",
+                "type": "shell",
+                "command": "make dev-restart",
+                "problemMatcher": []
+            },
+            {
+                "label": "Run Tests",
+                "type": "shell",
+                "command": "go test -v -race ./...",
+                "problemMatcher": [
+                    "$go"
+                ],
+                "group": {
+                    "kind": "test",
+                    "isDefault": true
+                }
+            },
+            {
+                "label": "Build Production",
+                "type": "shell",
+                "command": "docker compose build",
+                "problemMatcher": [],
+                "group": {
+                    "kind": "build",
+                    "isDefault": true
+                }
+            }
+        ]
+    }
+}

@@ -6,7 +6,9 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/alireza0/x-ui/database/model"
 	"github.com/alireza0/x-ui/logger"
+	"github.com/alireza0/x-ui/util/json_util"
 	"github.com/alireza0/x-ui/xray"
 
 	"go.uber.org/atomic"
@@ -179,6 +181,95 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 		inboundConfig := inbound.GenXrayInboundConfig()
 		xrayConfig.InboundConfigs = append(xrayConfig.InboundConfigs, *inboundConfig)
 	}
+
+	// Load outbounds from database (replaces template outbounds)
+	outboundService := OutboundService{}
+	dbOutbounds, err := outboundService.GetAllOutbounds()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert database outbounds to xray config format
+	var xrayOutbounds []map[string]interface{}
+	for _, outbound := range dbOutbounds {
+		if !outbound.Enable {
+			continue
+		}
+
+		xrayOutbound := map[string]interface{}{
+			"protocol": string(outbound.Protocol),
+			"tag":      outbound.Tag,
+		}
+
+		// Parse settings JSON
+		if outbound.Settings != "" && outbound.Settings != "{}" {
+			var settings map[string]interface{}
+			if err := json.Unmarshal([]byte(outbound.Settings), &settings); err == nil {
+				xrayOutbound["settings"] = settings
+			}
+		}
+
+		// Parse stream settings JSON
+		if outbound.StreamSettings != "" && outbound.StreamSettings != "{}" {
+			var streamSettings map[string]interface{}
+			if err := json.Unmarshal([]byte(outbound.StreamSettings), &streamSettings); err == nil {
+				xrayOutbound["streamSettings"] = streamSettings
+			}
+		}
+
+		// Add server info for proxy protocols
+		if outbound.Address != "" && outbound.Port > 0 {
+			if outbound.Protocol == model.VMess || outbound.Protocol == model.VLESS {
+				// VMess/VLESS use vnext
+				if xrayOutbound["settings"] == nil {
+					xrayOutbound["settings"] = map[string]interface{}{}
+				}
+				settings := xrayOutbound["settings"].(map[string]interface{})
+				
+				// Check if vnext already exists in settings
+				existingVnext, hasVnext := settings["vnext"].([]interface{})
+				if hasVnext && len(existingVnext) > 0 {
+					// Vnext exists, update address/port if needed but preserve users
+					for i := range existingVnext {
+						if vnextMap, ok := existingVnext[i].(map[string]interface{}); ok {
+							vnextMap["address"] = outbound.Address
+							vnextMap["port"] = outbound.Port
+						}
+					}
+				} else {
+					// No vnext exists, create basic structure
+					settings["vnext"] = []map[string]interface{}{
+						{
+							"address": outbound.Address,
+							"port":    outbound.Port,
+						},
+					}
+				}
+			} else if outbound.Protocol == model.Trojan || outbound.Protocol == model.Shadowsocks {
+				// Trojan/Shadowsocks use servers
+				if xrayOutbound["settings"] == nil {
+					xrayOutbound["settings"] = map[string]interface{}{}
+				}
+				settings := xrayOutbound["settings"].(map[string]interface{})
+				settings["servers"] = []map[string]interface{}{
+					{
+						"address": outbound.Address,
+						"port":    outbound.Port,
+					},
+				}
+			}
+		}
+
+		xrayOutbounds = append(xrayOutbounds, xrayOutbound)
+	}
+
+	// Marshal outbounds to JSON
+	outboundsJSON, err := json.Marshal(xrayOutbounds)
+	if err != nil {
+		return nil, err
+	}
+	xrayConfig.OutboundConfigs = json_util.RawMessage(outboundsJSON)
+
 	return xrayConfig, nil
 }
 

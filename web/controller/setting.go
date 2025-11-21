@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/alireza0/x-ui/logger"
 	"github.com/alireza0/x-ui/web/entity"
 	"github.com/alireza0/x-ui/web/service"
 	"github.com/alireza0/x-ui/web/session"
@@ -60,13 +61,49 @@ func (a *SettingController) getDefaultSettings(c *gin.Context) {
 }
 
 func (a *SettingController) updateSetting(c *gin.Context) {
-	allSetting := &entity.AllSetting{}
-	err := c.ShouldBind(allSetting)
+	// Load current settings first
+	currentSettings, err := a.settingService.GetAllSetting()
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 		return
 	}
-	err = a.settingService.UpdateAllSetting(allSetting)
+	
+	logger.Info("=== DEBUG: GetAllSetting returned WebPort:", currentSettings.WebPort)
+	logger.Info("=== DEBUG: Full current settings:", currentSettings)
+	
+	// Parse form data into a temporary struct to avoid overwriting existing fields
+	incomingSettings := &entity.AllSetting{}
+	err = c.ShouldBind(incomingSettings)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+		return
+	}
+	
+	logger.Info("=== DEBUG: After ShouldBind, incoming WebPort:", incomingSettings.WebPort)
+	
+	// Only update the outbound-related fields that were actually sent
+	if c.PostForm("outboundTestInterval") != "" {
+		currentSettings.OutboundTestInterval = incomingSettings.OutboundTestInterval
+	}
+	if c.PostForm("outboundTestURL") != "" {
+		currentSettings.OutboundTestURL = incomingSettings.OutboundTestURL
+	}
+	if c.PostForm("outboundTestTimeout") != "" {
+		currentSettings.OutboundTestTimeout = incomingSettings.OutboundTestTimeout
+	}
+	if c.PostForm("outboundCleanupDays") != "" {
+		currentSettings.OutboundCleanupDays = incomingSettings.OutboundCleanupDays
+	}
+	if c.PostForm("outboundAutoRoute") != "" {
+		currentSettings.OutboundAutoRoute = incomingSettings.OutboundAutoRoute
+	}
+	if c.PostForm("outboundRouteInterval") != "" {
+		currentSettings.OutboundRouteInterval = incomingSettings.OutboundRouteInterval
+	}
+	
+	logger.Info("=== DEBUG: Before UpdateAllSetting, final WebPort:", currentSettings.WebPort)
+	
+	err = a.settingService.UpdateAllSetting(currentSettings)
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
 }
 

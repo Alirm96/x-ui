@@ -273,6 +273,10 @@ func (s *ServerService) RestartXrayService() (string error) {
 	return nil
 }
 
+func (s *ServerService) ParseXrayError() *XrayError {
+	return s.xrayService.ParseXrayError()
+}
+
 func (s *ServerService) downloadXRay(version string) (string, error) {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH

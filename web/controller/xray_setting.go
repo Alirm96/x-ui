@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/alireza0/x-ui/util/common"
 	"github.com/alireza0/x-ui/web/service"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,7 @@ func (a *XraySettingController) initRouter(g *gin.RouterGroup) {
 
 	g.POST("/", a.getXraySetting)
 	g.POST("/update", a.updateSetting)
+	g.POST("/applyOutboundRouting", a.applyOutboundRouting)
 	g.GET("/getXrayResult", a.getXrayResult)
 	g.GET("/getDefaultJsonConfig", a.getDefaultXrayConfig)
 	g.POST("/warp/:action", a.warp)
@@ -49,6 +51,22 @@ func (a *XraySettingController) updateSetting(c *gin.Context) {
 	xraySetting := c.PostForm("xraySetting")
 	err := a.XraySettingService.SaveXraySetting(xraySetting)
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+}
+
+func (a *XraySettingController) applyOutboundRouting(c *gin.Context) {
+	outboundTag := c.PostForm("outboundTag")
+	if outboundTag == "" {
+		jsonMsg(c, "Apply Outbound Routing", common.NewError("Outbound tag is required"))
+		return
+	}
+	
+	err := a.XraySettingService.ApplyOutboundRouting(outboundTag)
+	if err != nil {
+		jsonMsg(c, "Apply Outbound Routing", err)
+		return
+	}
+	
+	jsonMsg(c, "Apply Outbound Routing", nil)
 }
 
 func (a *XraySettingController) getDefaultXrayConfig(c *gin.Context) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -87,9 +88,10 @@ type Server struct {
 	xui    *controller.XUIController
 	api    *controller.APIController
 
-	xrayService    service.XrayService
-	settingService service.SettingService
-	tgbotService   service.Tgbot
+	xrayService         service.XrayService
+	settingService      service.SettingService
+	tgbotService        service.Tgbot
+	subscriptionService service.SubscriptionService
 
 	cron *cron.Cron
 
@@ -229,6 +231,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.server = controller.NewServerController(g)
 	s.xui = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g, s.server)
+	controller.NewXrayUpdateController(g)
 
 	return engine, nil
 }
@@ -256,6 +259,30 @@ func (s *Server) startTask() {
 		// Statistics every 10 seconds, start the delay for 5 seconds for the first time, and staggered with the time to restart xray
 		s.cron.AddJob("@every 10s", job.NewXrayTrafficJob())
 	}()
+
+	// Test outbound connections (configurable interval)
+	testInterval, err := s.settingService.GetOutboundTestInterval()
+	if err != nil || testInterval <= 0 {
+		testInterval = 4 // Default 4 hours
+	}
+	testSchedule := fmt.Sprintf("@every %dh", testInterval)
+	s.cron.AddJob(testSchedule, job.NewOutboundTestJob())
+	logger.Infof("Outbound test job scheduled: %s", testSchedule)
+
+	// Cleanup failed outbounds daily at 3 AM
+	s.cron.AddJob("0 3 * * *", job.NewOutboundCleanupJob())
+
+	// Auto-routing to best outbound (if enabled)
+	autoRoute, err := s.settingService.GetOutboundAutoRoute()
+	if err == nil && autoRoute {
+		routeInterval, err := s.settingService.GetOutboundRouteInterval()
+		if err != nil || routeInterval <= 0 {
+			routeInterval = 4 // Default 4 hours
+		}
+		routeSchedule := fmt.Sprintf("@every %dh", routeInterval)
+		s.cron.AddJob(routeSchedule, job.NewOutboundAutoRouteJob())
+		logger.Infof("Outbound auto-route job scheduled: %s", routeSchedule)
+	}
 
 	// Make a traffic condition every day, 8:30
 	var entry cron.EntryID
@@ -352,6 +379,9 @@ func (s *Server) Start() (err error) {
 
 	s.startTask()
 
+	// Start subscription auto-update scheduler
+	s.subscriptionService.StartAutoUpdate()
+
 	isTgbotenabled, err := s.settingService.GetTgbotenabled()
 	if (err == nil) && (isTgbotenabled) {
 		tgBot := s.tgbotService.NewTgbot()
@@ -364,6 +394,7 @@ func (s *Server) Start() (err error) {
 func (s *Server) Stop() error {
 	s.cancel()
 	s.xrayService.StopXray()
+	s.subscriptionService.StopAutoUpdate()
 	if s.cron != nil {
 		s.cron.Stop()
 	}

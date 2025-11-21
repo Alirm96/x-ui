@@ -1,0 +1,44 @@
+---
+# Development environment with hot-reload
+# Use: docker compose -f docker-compose.dev.yml up
+
+services:
+  x-ui-dev:
+    image: cosmtrek/air:latest
+    container_name: x-ui-dev
+    hostname: x-ui-dev
+    working_dir: /app
+    volumes:
+      # Mount entire project for hot-reload
+      - .:/app
+      # Persistent database
+      - ./db/:/etc/x-ui/
+      # Persistent certificates
+      - ./cert/:/root/cert/
+      # Go module cache (faster rebuilds)
+      - go-mod-cache:/go/pkg/mod
+      # Air build cache
+      - air-tmp-cache:/app/tmp
+    environment:
+      XRAY_VMESS_AEAD_FORCED: "false"
+      XUI_DEBUG: "true"
+      XUI_DEV_MODE: "true"
+      # Development-specific settings
+      GIN_MODE: "debug"
+      CGO_ENABLED: "1"
+    tty: true
+    network_mode: host
+    restart: unless-stopped
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:54321/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  go-mod-cache:
+    name: x-ui-dev-go-mod-cache
+  air-tmp-cache:
+    name: x-ui-dev-air-tmp

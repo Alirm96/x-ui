@@ -40,6 +40,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 
 	g.Use(a.checkLogin)
 	g.GET("/status", a.status)
+	g.GET("/xrayError", a.getXrayError)
 	g.GET("/getDb", a.getDb)
 	g.GET("/getConfigJson", a.getConfigJson)
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
@@ -75,6 +76,11 @@ func (a *ServerController) status(c *gin.Context) {
 	a.lastGetStatusTime = time.Now()
 
 	jsonObj(c, a.lastStatus, nil)
+}
+
+func (a *ServerController) getXrayError(c *gin.Context) {
+	xrayError := a.serverService.ParseXrayError()
+	jsonObj(c, xrayError, nil)
 }
 
 func (a *ServerController) getXrayVersion(c *gin.Context) {

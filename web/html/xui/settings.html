@@ -328,7 +328,8 @@
                                                                 :dropdown-class-name="themeSwitcher.currentTheme"
                                                                 @change="(value) => updateNoiseType(index, value)">
                                                                 <a-select-option :value="p" :label="p"
-                                                                    v-for="p in ['rand', 'base64', 'str', 'hex']" :key="p">
+                                                                    v-for="p in ['rand', 'base64', 'str', 'hex']"
+                                                                    :key="p">
                                                                     [[ p ]] </a-select-option>
                                                             </a-select>
                                                         </a-col>
@@ -404,13 +405,13 @@
                                                 <a-list-item>
                                                     <a-row style="padding: 0 20px">
                                                         <a-col :lg="24" :xl="12">
-                                                            <a-list-item-meta 
-                                                                title='{{ i18n "pages.xray.directips" }}'/>
+                                                            <a-list-item-meta
+                                                                title='{{ i18n "pages.xray.directips" }}' />
                                                         </a-col>
                                                         <a-col :lg="24" :xl="12">
                                                             <a-select mode="tags" style="width: 100%"
-                                                            v-model="directIPs"
-                                                            :dropdown-class-name="themeSwitcher.currentTheme">
+                                                                v-model="directIPs"
+                                                                :dropdown-class-name="themeSwitcher.currentTheme">
                                                                 <a-select-option :value="p.value" :label="p.label"
                                                                     v-for="p in directIPsOptions"> [[ p.label ]]
                                                                 </a-select-option>
@@ -421,13 +422,13 @@
                                                 <a-list-item>
                                                     <a-row style="padding: 0 20px">
                                                         <a-col :lg="24" :xl="12">
-                                                            <a-list-item-meta 
-                                                                title='{{ i18n "pages.xray.directdomains" }}'/>
+                                                            <a-list-item-meta
+                                                                title='{{ i18n "pages.xray.directdomains" }}' />
                                                         </a-col>
                                                         <a-col :lg="24" :xl="12">
                                                             <a-select mode="tags" style="width: 100%"
-                                                            v-model="directDomains"
-                                                            :dropdown-class-name="themeSwitcher.currentTheme">
+                                                                v-model="directDomains"
+                                                                :dropdown-class-name="themeSwitcher.currentTheme">
                                                                 <a-select-option :value="p.value" :label="p.label"
                                                                     v-for="p in diretDomainsOptions"> [[ p.label ]]
                                                                 </a-select-option>
@@ -556,14 +557,14 @@
                 set remarkSeparator(value) {
                     this.allSetting.remarkModel = value + this.allSetting.remarkModel.substring(1);
                     this.changeRemarkSample();
-                },
+                }
+            },
+            methods: {
                 changeRemarkSample() {
                     sample = []
                     this.remarkModel.forEach(r => sample.push(this.remarkModels[r]));
                     this.remarkSample = sample.length == 0 ? '' : sample.join(this.remarkSeparator);
-                }
-            },
-            methods: {
+                },
                 loading(spinning = true) {
                     this.spinning = spinning;
                 },
@@ -643,7 +644,7 @@
                     const updatedNoises = [...this.noisesArray];
                     updatedNoises[index] = { ...updatedNoises[index], delay: value };
                     this.noisesArray = updatedNoises;
-                },
+                }
             },
             computed: {
                 fragment: {

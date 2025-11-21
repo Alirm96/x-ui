@@ -63,6 +63,14 @@ var defaultValueMap = map[string]string{
 	"subJsonMux":         "",
 	"subJsonRules":       "",
 	"warp":               "",
+	
+	// Outbound defaults
+	"outboundTestInterval":  "4",    // 4 hours
+	"outboundTestURL":       "https://www.google.com",
+	"outboundTestTimeout":   "10",   // 10 seconds
+	"outboundCleanupDays":   "7",    // 7 days
+	"outboundAutoRoute":     "false",
+	"outboundRouteInterval": "4",    // 4 hours
 }
 
 type SettingService struct{}
@@ -449,6 +457,10 @@ func (s *SettingService) UpdateAllSetting(allSetting *entity.AllSetting) error {
 		return err
 	}
 
+	// Check if outboundAutoRoute changed to trigger routing rule creation/deletion
+	oldAutoRoute, _ := s.GetOutboundAutoRoute()
+	logger.Info("=== DEBUG UpdateAllSetting: oldAutoRoute =", oldAutoRoute, ", newAutoRoute =", allSetting.OutboundAutoRoute)
+
 	v := reflect.ValueOf(allSetting).Elem()
 	t := reflect.TypeOf(allSetting).Elem()
 	fields := reflect_util.GetFields(t)
@@ -462,6 +474,28 @@ func (s *SettingService) UpdateAllSetting(allSetting *entity.AllSetting) error {
 			errs = append(errs, err)
 		}
 	}
+	
+	// If outboundAutoRoute changed, handle routing rules
+	if oldAutoRoute != allSetting.OutboundAutoRoute {
+		logger.Info("=== Auto-routing changed from", oldAutoRoute, "to", allSetting.OutboundAutoRoute)
+		inboundService := InboundService{}
+		if allSetting.OutboundAutoRoute {
+			// When enabling auto-routing, create routing rule with current best outbound
+			outboundService := OutboundService{}
+			bestOutbound, err := outboundService.GetBestOutbound()
+			if err == nil && bestOutbound != nil {
+				logger.Info("Creating default routing rules to outbound:", bestOutbound.Tag)
+				inboundService.CreateDefaultRoutingRules(bestOutbound.Tag)
+			} else {
+				logger.Warning("No best outbound found for auto-routing")
+			}
+		} else {
+			// When disabling auto-routing, remove the default routing rule
+			logger.Info("Removing default routing rules")
+			inboundService.RemoveDefaultRoutingRules()
+		}
+	}
+	
 	return common.Combine(errs...)
 }
 
@@ -533,4 +567,79 @@ func (s *SettingService) GetDefaultSettings(host string) (interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// Outbound settings
+func (s *SettingService) GetOutboundTestInterval() (int, error) {
+	return s.getInt("outboundTestInterval")
+}
+
+func (s *SettingService) SetOutboundTestInterval(interval int) error {
+	return s.setInt("outboundTestInterval", interval)
+}
+
+func (s *SettingService) GetOutboundTestURL() (string, error) {
+	return s.getString("outboundTestURL")
+}
+
+func (s *SettingService) SetOutboundTestURL(url string) error {
+	return s.setString("outboundTestURL", url)
+}
+
+func (s *SettingService) GetOutboundTestTimeout() (int, error) {
+	return s.getInt("outboundTestTimeout")
+}
+
+func (s *SettingService) SetOutboundTestTimeout(timeout int) error {
+	return s.setInt("outboundTestTimeout", timeout)
+}
+
+func (s *SettingService) GetOutboundCleanupDays() (int, error) {
+	return s.getInt("outboundCleanupDays")
+}
+
+func (s *SettingService) SetOutboundCleanupDays(days int) error {
+	return s.setInt("outboundCleanupDays", days)
+}
+
+func (s *SettingService) GetOutboundAutoRoute() (bool, error) {
+	return s.getBool("outboundAutoRoute")
+}
+
+func (s *SettingService) SetOutboundAutoRoute(enable bool) error {
+	err := s.setBool("outboundAutoRoute", enable)
+	if err != nil {
+		return err
+	}
+
+	// Manage default inbound routing rule based on auto-routing state
+	inboundService := InboundService{}
+	if enable {
+		// When enabling auto-routing, create routing rule with current best outbound
+		outboundService := OutboundService{}
+		bestOutbound, err := outboundService.GetBestOutbound()
+		if err == nil && bestOutbound != nil {
+			// Create/update routing rule for default inbounds
+			err = inboundService.CreateDefaultRoutingRules(bestOutbound.Tag)
+			if err != nil {
+				logger.Warning("Failed to create default inbound routing rules:", err)
+			}
+		}
+	} else {
+		// When disabling auto-routing, remove the routing rule for default inbounds
+		err = inboundService.RemoveDefaultRoutingRules()
+		if err != nil {
+			logger.Warning("Failed to remove default inbound routing rules:", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *SettingService) GetOutboundRouteInterval() (int, error) {
+	return s.getInt("outboundRouteInterval")
+}
+
+func (s *SettingService) SetOutboundRouteInterval(interval int) error {
+	return s.setInt("outboundRouteInterval", interval)
 }

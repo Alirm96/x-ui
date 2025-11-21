@@ -9,9 +9,22 @@ error.log
 tmp
 main
 backup/
-bin/
+bin/*
+!bin/.gitkeep
 dist/
 release/
 /release.sh
 /x-ui
 .DS_Store
+
+# Development
+.env
+.env.local
+db/*.db
+db/*.db-shm
+db/*.db-wal
+!db/.gitkeep
+cert/*.crt
+cert/*.key
+cert/*.pem
+!cert/.gitkeep

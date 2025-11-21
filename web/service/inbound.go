@@ -1516,3 +1516,311 @@ func (s *InboundService) MigrateDB() {
 func (s *InboundService) GetOnlineClients() []string {
 	return p.GetOnlineClients()
 }
+
+// InitDefaultInbounds creates default SOCKS and HTTP inbounds if they don't exist
+// Also creates default outbounds (direct, block) in the database
+func (s *InboundService) InitDefaultInbounds() error {
+	db := database.GetDB()
+	
+	// Check if default inbounds already exist
+	var inboundCount int64
+	db.Model(&model.Inbound{}).Where("tag IN ?", []string{"default-socks", "default-http"}).Count(&inboundCount)
+	if inboundCount < 2 {
+		logger.Info("Creating default inbounds (SOCKS on 20808, HTTP on 20809)...")
+
+		// Create default SOCKS inbound
+		socksSettings := map[string]interface{}{
+			"auth":    "noauth",
+			"udp":     true,
+			"ip":      "127.0.0.1",
+			"clients": []interface{}{},
+		}
+		socksSettingsJSON, _ := json.MarshalIndent(socksSettings, "", "  ")
+
+		socksSniffing := map[string]interface{}{
+			"enabled":      true,
+			"destOverride": []string{"http", "tls"},
+		}
+		socksSniffingJSON, _ := json.MarshalIndent(socksSniffing, "", "  ")
+
+		socksInbound := &model.Inbound{
+			UserId:         1,
+			Up:             0,
+			Down:           0,
+			Total:          0,
+			Remark:         "Default SOCKS Proxy",
+			Enable:         true,
+			ExpiryTime:     0,
+			Listen:         "127.0.0.1",
+			Port:           20808,
+			Protocol:       "socks",
+			Settings:       string(socksSettingsJSON),
+			StreamSettings: "{}",
+			Tag:            "default-socks",
+			Sniffing:       string(socksSniffingJSON),
+		}
+
+		// Create default HTTP inbound
+		httpSettings := map[string]interface{}{
+			"timeout":  300,
+			"accounts": []interface{}{},
+		}
+		httpSettingsJSON, _ := json.MarshalIndent(httpSettings, "", "  ")
+
+		httpSniffing := map[string]interface{}{
+			"enabled":      true,
+			"destOverride": []string{"http", "tls"},
+		}
+		httpSniffingJSON, _ := json.MarshalIndent(httpSniffing, "", "  ")
+
+		httpInbound := &model.Inbound{
+			UserId:         1,
+			Up:             0,
+			Down:           0,
+			Total:          0,
+			Remark:         "Default HTTP Proxy",
+			Enable:         true,
+			ExpiryTime:     0,
+			Listen:         "127.0.0.1",
+			Port:           20809,
+			Protocol:       "http",
+			Settings:       string(httpSettingsJSON),
+			StreamSettings: "{}",
+			Tag:            "default-http",
+			Sniffing:       string(httpSniffingJSON),
+		}
+
+		// Add SOCKS inbound - directly to database (xray not running yet during init)
+		err := db.Save(socksInbound).Error
+		if err != nil {
+			logger.Warning("Failed to create default SOCKS inbound:", err)
+		} else {
+			logger.Info("Default SOCKS inbound created on port 20808")
+		}
+
+		// Add HTTP inbound - directly to database
+		err = db.Save(httpInbound).Error
+		if err != nil {
+			logger.Warning("Failed to create default HTTP inbound:", err)
+		} else {
+			logger.Info("Default HTTP inbound created on port 20809")
+		}
+	} else {
+		logger.Info("Default inbounds already exist")
+	}
+
+	// Check if default outbounds already exist
+	var outboundCount int64
+	db.Model(&model.Outbound{}).Where("tag IN ?", []string{"direct", "block"}).Count(&outboundCount)
+	
+	// Migrate existing System group outbounds to default group
+	db.Model(&model.Outbound{}).Where("group_name = ?", "System").Update("group_name", "default")
+	
+	if outboundCount < 2 {
+		logger.Info("Creating default outbounds (direct, block)...")
+		
+		// Create direct (freedom) outbound
+		directSettings := map[string]interface{}{
+			"domainStrategy": "AsIs",
+		}
+		directSettingsJSON, _ := json.MarshalIndent(directSettings, "", "  ")
+
+		directOutbound := &model.Outbound{
+			UserId:         1,
+			Protocol:       model.Freedom,
+			Tag:            "direct",
+			Remark:         "Direct Connection",
+			Settings:       string(directSettingsJSON),
+			StreamSettings: "{}",
+			Enable:         true,
+			IsSystem:       true,
+			GroupName:      "default",
+		}
+
+		// Create block (blackhole) outbound
+		blockSettings := map[string]interface{}{
+			"response": map[string]interface{}{
+				"type": "none",
+			},
+		}
+		blockSettingsJSON, _ := json.MarshalIndent(blockSettings, "", "  ")
+
+		blockOutbound := &model.Outbound{
+			UserId:         1,
+			Protocol:       model.Blackhole,
+			Tag:            "block",
+			Remark:         "Block Connection",
+			Settings:       string(blockSettingsJSON),
+			StreamSettings: "{}",
+			Enable:         true,
+			IsSystem:       true,
+			GroupName:      "default",
+		}
+
+		// Save outbounds
+		var err error
+		err = db.Save(directOutbound).Error
+		if err != nil {
+			logger.Warning("Failed to create direct outbound:", err)
+		} else {
+			logger.Info("Default 'direct' outbound created")
+		}
+
+		err = db.Save(blockOutbound).Error
+		if err != nil {
+			logger.Warning("Failed to create block outbound:", err)
+		} else {
+			logger.Info("Default 'block' outbound created")
+		}
+	} else {
+		logger.Info("Default outbounds already exist")
+	}
+
+	return nil
+}
+
+// CreateDefaultRoutingRules creates routing rules for default inbounds
+// This is called after auto-routing finds the best outbound
+func (s *InboundService) CreateDefaultRoutingRules(bestOutboundTag string) error {
+	xraySettingService := &XraySettingService{}
+	
+	// Get current xray config
+	configStr, err := xraySettingService.GetXrayConfigTemplate()
+	if err != nil {
+		return err
+	}
+
+	// Parse config
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+		return common.NewError("Failed to parse xray config:", err)
+	}
+
+	// Ensure routing exists
+	if config["routing"] == nil {
+		config["routing"] = make(map[string]interface{})
+	}
+	routing := config["routing"].(map[string]interface{})
+
+	// Ensure rules array exists
+	if routing["rules"] == nil {
+		routing["rules"] = []interface{}{}
+	}
+	rules := routing["rules"].([]interface{})
+
+	// Check if default inbound routing rules already exist
+	hasDefaultRouting := false
+	for i, rule := range rules {
+		ruleMap := rule.(map[string]interface{})
+		if inboundTags, ok := ruleMap["inboundTag"].([]interface{}); ok {
+			for _, tag := range inboundTags {
+				if tag == "default-socks" || tag == "default-http" {
+					// Update existing rule with new best outbound
+					ruleMap["outboundTag"] = bestOutboundTag
+					rules[i] = ruleMap
+					hasDefaultRouting = true
+					break
+				}
+			}
+		}
+		if hasDefaultRouting {
+			break
+		}
+	}
+
+	// If no routing rule exists for default inbounds, create one
+	if !hasDefaultRouting {
+		newRule := map[string]interface{}{
+			"type":        "field",
+			"inboundTag":  []string{"default-socks", "default-http"},
+			"outboundTag": bestOutboundTag,
+		}
+		// Add at the beginning of rules
+		rules = append([]interface{}{newRule}, rules...)
+		logger.Infof("Created routing rule for default inbounds -> %s", bestOutboundTag)
+	} else {
+		logger.Infof("Updated routing rule for default inbounds -> %s", bestOutboundTag)
+	}
+
+	routing["rules"] = rules
+	config["routing"] = routing
+
+	// Save updated config
+	configBytes, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return common.NewError("Failed to serialize config:", err)
+	}
+
+	if err := xraySettingService.SaveXraySetting(string(configBytes)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RemoveDefaultRoutingRules removes routing rules for default inbounds
+// This is called when auto-routing is disabled
+func (s *InboundService) RemoveDefaultRoutingRules() error {
+	xraySettingService := &XraySettingService{}
+	
+	// Get current xray config
+	configStr, err := xraySettingService.GetXrayConfigTemplate()
+	if err != nil {
+		return err
+	}
+
+	// Parse config
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+		return common.NewError("Failed to parse xray config:", err)
+	}
+
+	// Ensure routing exists
+	if config["routing"] == nil {
+		return nil // No routing to remove from
+	}
+	routing := config["routing"].(map[string]interface{})
+
+	// Ensure rules array exists
+	if routing["rules"] == nil {
+		return nil // No rules to remove
+	}
+	rules := routing["rules"].([]interface{})
+
+	// Remove routing rules for default inbounds
+	var filteredRules []interface{}
+	for _, rule := range rules {
+		ruleMap := rule.(map[string]interface{})
+		isDefaultInboundRule := false
+		
+		if inboundTags, ok := ruleMap["inboundTag"].([]interface{}); ok {
+			for _, tag := range inboundTags {
+				if tag == "default-socks" || tag == "default-http" {
+					isDefaultInboundRule = true
+					break
+				}
+			}
+		}
+		
+		// Keep the rule if it's not for default inbounds
+		if !isDefaultInboundRule {
+			filteredRules = append(filteredRules, rule)
+		}
+	}
+
+	routing["rules"] = filteredRules
+	config["routing"] = routing
+
+	// Save updated config
+	configBytes, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return common.NewError("Failed to serialize config:", err)
+	}
+
+	if err := xraySettingService.SaveXraySetting(string(configBytes)); err != nil {
+		return err
+	}
+
+	logger.Info("Removed routing rules for default inbounds")
+	return nil
+}

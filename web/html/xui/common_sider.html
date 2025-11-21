@@ -7,6 +7,14 @@
     <a-icon type="user"></a-icon>
     <span><strong>{{ i18n "menu.inbounds"}}</strong></span>
 </a-menu-item>
+<a-menu-item key="{{ .base_path }}xui/outbounds">
+    <a-icon type="cloud-server"></a-icon>
+    <span><strong>{{ i18n "menu.outbounds"}}</strong></span>
+</a-menu-item>
+<a-menu-item key="{{ .base_path }}xui/routing">
+    <a-icon type="branches"></a-icon>
+    <span><strong>{{ i18n "menu.routing"}}</strong></span>
+</a-menu-item>
 <a-menu-item key="{{ .base_path }}xui/settings">
     <a-icon type="setting"></a-icon>
     <span><strong>{{ i18n "menu.settings"}}</strong></span>
@@ -14,6 +22,10 @@
 <a-menu-item key="{{ .base_path }}xui/xray">
     <a-icon type="tool"></a-icon>
     <span><strong>{{ i18n "menu.xray"}}</strong></span>
+</a-menu-item>
+<a-menu-item key="{{ .base_path }}xui/update">
+    <a-icon type="cloud-download"></a-icon>
+    <span><strong>{{ i18n "menu.update"}}</strong></span>
 </a-menu-item>
 <a-menu-item key="{{ .base_path }}logout">
     <a-icon type="logout"></a-icon>
@@ -31,14 +43,12 @@
         </a-menu-item>
     </a-menu>
     <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="['{{ .request_uri }}']"
-            @click="({key}) => key.startsWith('http') ? window.open(key) : location.href = key">
+        @click="({key}) => key.startsWith('http') ? window.open(key) : location.href = key">
         {{template "menuItems" .}}
     </a-menu>
 </a-layout-sider>
 <a-drawer id="sider-drawer" placement="left" :closable="false" :class="themeSwitcher.currentTheme"
-          @close="siderDrawer.close()"
-          :visible="siderDrawer.visible"
-          :wrap-style="{ padding: 0 }">
+    @close="siderDrawer.close()" :visible="siderDrawer.visible" :wrap-style="{ padding: 0 }">
     <div class="drawer-handle" @click="siderDrawer.change()" slot="handle">
         <a-icon :type="siderDrawer.visible ? 'close' : 'menu-fold'"></a-icon>
     </div>
