@@ -374,6 +374,10 @@ func migrateDb() {
 }
 
 func main() {
+	if err := ensureXrayAndGeoFiles(); err != nil {
+		fmt.Fprintf(os.Stderr, "[x-ui] Failed to ensure xray/geosite/geoip: %v\n", err)
+		os.Exit(1)
+	}
 	if len(os.Args) < 2 {
 		runWebServer()
 		return
