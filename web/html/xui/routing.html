@@ -616,33 +616,37 @@
                     this.loading(false);
                 },
                 addRule() {
-                    ruleModal.show({
-                        title: '{{ i18n "pages.xray.rules.add"}}',
-                        okText: '{{ i18n "pages.xray.rules.add" }}',
-                        confirm: (rule) => {
-                            ruleModal.loading();
-                            if (JSON.stringify(rule).length > 3) {
-                                this.templateSettings.routing.rules.push(rule);
-                                this.routingRuleSettings = JSON.stringify(this.templateSettings.routing.rules);
-                            }
-                            ruleModal.close();
-                        },
-                        isEdit: false
+                    this.getXraySetting().then(() => {
+                        ruleModal.show({
+                            title: '{{ i18n "pages.xray.rules.add"}}',
+                            okText: '{{ i18n "pages.xray.rules.add" }}',
+                            confirm: (rule) => {
+                                ruleModal.loading();
+                                if (JSON.stringify(rule).length > 3) {
+                                    this.templateSettings.routing.rules.push(rule);
+                                    this.routingRuleSettings = JSON.stringify(this.templateSettings.routing.rules);
+                                }
+                                ruleModal.close();
+                            },
+                            isEdit: false
+                        });
                     });
                 },
                 editRule(index) {
-                    ruleModal.show({
-                        title: '{{ i18n "pages.xray.rules.edit"}} ' + (index + 1),
-                        rule: app.templateSettings.routing.rules[index],
-                        confirm: (rule) => {
-                            ruleModal.loading();
-                            if (JSON.stringify(rule).length > 3) {
-                                this.templateSettings.routing.rules[index] = rule;
-                                this.routingRuleSettings = JSON.stringify(this.templateSettings.routing.rules);
-                            }
-                            ruleModal.close();
-                        },
-                        isEdit: true
+                    this.getXraySetting().then(() => {
+                        ruleModal.show({
+                            title: '{{ i18n "pages.xray.rules.edit"}} ' + (index + 1),
+                            rule: app.templateSettings.routing.rules[index],
+                            confirm: (rule) => {
+                                ruleModal.loading();
+                                if (JSON.stringify(rule).length > 3) {
+                                    this.templateSettings.routing.rules[index] = rule;
+                                    this.routingRuleSettings = JSON.stringify(this.templateSettings.routing.rules);
+                                }
+                                ruleModal.close();
+                            },
+                            isEdit: true
+                        });
                     });
                 },
                 replaceRule(old_index, new_index) {

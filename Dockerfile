@@ -17,5 +17,6 @@ WORKDIR /app
 RUN apk add ca-certificates tzdata
 
 COPY --from=builder  /app/build/ /app/
+
 VOLUME [ "/etc/x-ui" ]
 CMD [ "./x-ui" ]

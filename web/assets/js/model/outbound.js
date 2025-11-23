@@ -217,7 +217,7 @@ class KcpStreamSettings extends CommonClass {
 
 class WsStreamSettings extends CommonClass {
     constructor(
-        path = '/', 
+        path = '/',
         host = '',
         heartbeatPeriod = 0,
 
@@ -430,6 +430,7 @@ class SockoptStreamSettings extends CommonClass {
         tcpMptcp = false,
         penetrate = false,
         addressPortStrategy = Address_Port_Strategy.NONE,
+        mark = undefined,
     ) {
         super();
         this.dialerProxy = dialerProxy;
@@ -438,6 +439,7 @@ class SockoptStreamSettings extends CommonClass {
         this.tcpMptcp = tcpMptcp;
         this.penetrate = penetrate;
         this.addressPortStrategy = addressPortStrategy;
+        this.mark = mark;
     }
 
     static fromJson(json = {}) {
@@ -448,7 +450,8 @@ class SockoptStreamSettings extends CommonClass {
             json.tcpKeepAliveInterval,
             json.tcpMptcp,
             json.penetrate,
-            json.addressPortStrategy
+            json.addressPortStrategy,
+            json.mark
         );
     }
 
@@ -459,7 +462,8 @@ class SockoptStreamSettings extends CommonClass {
             tcpKeepAliveInterval: this.tcpKeepAliveInterval,
             tcpMptcp: this.tcpMptcp,
             penetrate: this.penetrate,
-            addressPortStrategy: this.addressPortStrategy
+            addressPortStrategy: this.addressPortStrategy,
+            mark: this.mark
         };
     }
 }
@@ -906,7 +910,7 @@ Outbound.FreedomSettings = class extends CommonClass {
     toJson() {
         return {
             domainStrategy: ObjectUtil.isEmpty(this.domainStrategy) ? undefined : this.domainStrategy,
-            redirect: ObjectUtil.isEmpty(this.redirect) ? undefined: this.redirect,
+            redirect: ObjectUtil.isEmpty(this.redirect) ? undefined : this.redirect,
             fragment: Object.keys(this.fragment).length === 0 ? undefined : this.fragment,
             noises: this.noises.length === 0 ? undefined : Outbound.FreedomSettings.Noise.toJsonArray(this.noises),
         };
@@ -1207,7 +1211,7 @@ Outbound.WireguardSettings = class extends CommonClass {
         super();
         this.mtu = mtu;
         this.secretKey = secretKey;
-        this.pubKey = secretKey.length>0 ? Wireguard.generateKeypair(secretKey).publicKey : '';
+        this.pubKey = secretKey.length > 0 ? Wireguard.generateKeypair(secretKey).publicKey : '';
         this.address = address instanceof Array ? address.join(',') : address;
         this.workers = workers;
         this.domainStrategy = domainStrategy;

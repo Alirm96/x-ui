@@ -1,12 +1,12 @@
 {{define "ruleModal"}}
 <a-modal id="rule-modal" v-model="ruleModal.visible" :title="ruleModal.title" @ok="ruleModal.ok"
-         :confirm-loading="ruleModal.confirmLoading" :closable="true" :mask-closable="false"
-         :ok-text="ruleModal.okText" cancel-text='{{ i18n "close" }}' :class="themeSwitcher.currentTheme">
+    :confirm-loading="ruleModal.confirmLoading" :closable="true" :mask-closable="false" :ok-text="ruleModal.okText"
+    cancel-text='{{ i18n "close" }}' :class="themeSwitcher.currentTheme">
     <a-form :colon="false" :label-col="{ md: {span:8} }" :wrapper-col="{ md: {span:14} }">
         <a-form-item label='Domain Matcher'>
-                    <a-select v-model="ruleModal.rule.domainMatcher" :dropdown-class-name="themeSwitcher.currentTheme">
-                        <a-select-option v-for="dm in ['','hybrid','linear']" :value="dm">[[ dm ]]</a-select-option>
-                    </a-select>
+            <a-select v-model="ruleModal.rule.domainMatcher" :dropdown-class-name="themeSwitcher.currentTheme">
+                <a-select-option v-for="dm in ['','hybrid','linear']" :value="dm">[[ dm ]]</a-select-option>
+            </a-select>
         </a-form-item>
         <a-form-item>
             <template slot="label">
@@ -36,7 +36,8 @@
             </a-select>
         </a-form-item>
         <a-form-item label='Protocol'>
-            <a-select v-model="ruleModal.rule.protocol" mode="multiple" :dropdown-class-name="themeSwitcher.currentTheme">
+            <a-select v-model="ruleModal.rule.protocol" mode="multiple"
+                :dropdown-class-name="themeSwitcher.currentTheme">
                 <a-select-option v-for="x in ['http','tls','bittorrent']" :value="x">[[ x ]]</a-select-option>
             </a-select>
         </a-form-item>
@@ -45,10 +46,12 @@
         </a-form-item>
         <a-form-item :wrapper-col="{span: 24}">
             <a-input-group compact v-for="(attr,index) in ruleModal.rule.attrs">
-                <a-input style="width: 50%" v-model="attr[0]" placeholder='{{ i18n "pages.inbounds.stream.general.name" }}'>
+                <a-input style="width: 50%" v-model="attr[0]"
+                    placeholder='{{ i18n "pages.inbounds.stream.general.name" }}'>
                     <template slot="addonBefore" style="margin: 0;">[[ index+1 ]]</template>
                 </a-input>
-                <a-input style="width: 50%" v-model="attr[1]" placeholder='{{ i18n "pages.inbounds.stream.general.value" }}'>
+                <a-input style="width: 50%" v-model="attr[1]"
+                    placeholder='{{ i18n "pages.inbounds.stream.general.value" }}'>
                     <a-button slot="addonAfter" size="small" @click="ruleModal.rule.attrs.splice(index,1)">-</a-button>
                 </a-input>
             </a-input-group>
@@ -98,7 +101,8 @@
             <a-input v-model.trim="ruleModal.rule.port"></a-input>
         </a-form-item>
         <a-form-item label='Inbound Tags'>
-            <a-select v-model="ruleModal.rule.inboundTag" mode="multiple" :dropdown-class-name="themeSwitcher.currentTheme">
+            <a-select v-model="ruleModal.rule.inboundTag" mode="multiple"
+                :dropdown-class-name="themeSwitcher.currentTheme">
                 <a-select-option v-for="tag in ruleModal.inboundTags" :value="tag">[[ tag ]]</a-select-option>
             </a-select>
         </a-form-item>
@@ -120,7 +124,7 @@
                 <a-select-option v-for="tag in ruleModal.balancerTags" :value="tag">[[ tag ]]</a-select-option>
             </a-select>
         </a-form-item>
-    </table>
+        </table>
     </a-form>
 </a-modal>
 <script>
@@ -156,12 +160,40 @@
             newRule = ruleModal.getResult();
             ObjectUtil.execute(ruleModal.confirm, newRule);
         },
-        show({ title='', okText='{{ i18n "confirm" }}', rule, confirm=(rule)=>{}, isEdit=false  }) {
+        async show({ title = '', okText = '{{ i18n "confirm" }}', rule, confirm = (rule) => { }, isEdit = false }) {
             this.title = title;
             this.okText = okText;
             this.confirm = confirm;
             this.visible = true;
-            if(isEdit) {
+            // Fetch inbounds and outbounds from backend
+            let inbounds = [];
+            let outbounds = [];
+            try {
+                const inbMsg = await HttpUtil.post('/xui/inbound/list');
+                if (inbMsg.success && Array.isArray(inbMsg.obj)) {
+                    inbounds = inbMsg.obj;
+                }
+                const outbMsg = await HttpUtil.post('/xui/outbound/list');
+                if (outbMsg.success && Array.isArray(outbMsg.obj)) {
+                    outbounds = outbMsg.obj;
+                }
+            } catch (e) { /* ignore */ }
+            this.inboundTags = inbounds.filter(i => i.tag).map(i => i.tag);
+            if (app.inboundTags) {
+                this.inboundTags.push(...app.inboundTags);
+            }
+            if (app.enableDNS && !ObjectUtil.isEmpty(app.dnsTag)) this.inboundTags.push(app.dnsTag);
+            this.outboundTags = ["", ...outbounds.filter(o => o.tag).map(o => o.tag)];
+            if (app.templateSettings && app.templateSettings.reverse) {
+                if (app.templateSettings.reverse.bridges) {
+                    this.inboundTags.push(...app.templateSettings.reverse.bridges.map(b => b.tag));
+                }
+                if (app.templateSettings.reverse.portals) this.outboundTags.push(...app.templateSettings.reverse.portals.map(b => b.tag));
+            }
+            if (app.templateSettings && app.templateSettings.routing && app.templateSettings.routing.balancers) {
+                this.balancerTags = ["", ...app.templateSettings.routing.balancers.filter((o) => !ObjectUtil.isEmpty(o.tag)).map(obj => obj.tag)];
+            }
+            if (isEdit) {
                 this.rule.domainMatcher = rule.domainMatcher;
                 this.rule.domain = rule.domain ? rule.domain.join(',') : [];
                 this.rule.ip = rule.ip ? rule.ip.join(',') : [];
@@ -193,25 +225,12 @@
                 }
             }
             this.isEdit = isEdit;
-            this.inboundTags = app.templateSettings.inbounds.filter((i) => !ObjectUtil.isEmpty(i.tag)).map(obj => obj.tag);
-            this.inboundTags.push(...app.inboundTags);
-            if (app.enableDNS && !ObjectUtil.isEmpty(app.dnsTag)) this.inboundTags.push(app.dnsTag)
-            this.outboundTags = ["", ...app.templateSettings.outbounds.filter((o) => !ObjectUtil.isEmpty(o.tag)).map(obj => obj.tag)];
-            if(app.templateSettings.reverse){
-                if(app.templateSettings.reverse.bridges) {
-                    this.inboundTags.push(...app.templateSettings.reverse.bridges.map(b => b.tag));
-                }
-                if(app.templateSettings.reverse.portals) this.outboundTags.push(...app.templateSettings.reverse.portals.map(b => b.tag));
-            }
-            if (app.templateSettings.routing && app.templateSettings.routing.balancers) {
-                this.balancerTags = [ "", ...app.templateSettings.routing.balancers.filter((o) => !ObjectUtil.isEmpty(o.tag)).map(obj => obj.tag)];
-            }
         },
         close() {
             ruleModal.visible = false;
             ruleModal.loading(false);
         },
-        loading(loading=true) {
+        loading(loading = true) {
             ruleModal.confirmLoading = loading;
         },
         getResult() {
@@ -220,13 +239,13 @@
             newRule = {};
             rule.type = "field";
             rule.domainMatcher = value.domainMatcher;
-            rule.domain = value.domain.length>0 ? value.domain.split(',') : [];
-            rule.ip = value.ip.length>0 ? value.ip.split(',') : [];
+            rule.domain = value.domain.length > 0 ? value.domain.split(',') : [];
+            rule.ip = value.ip.length > 0 ? value.ip.split(',') : [];
             rule.port = value.port;
             rule.sourcePort = value.sourcePort;
             rule.network = value.network;
-            rule.source = value.source.length>0 ? value.source.split(',') : [];
-            rule.user = value.user.length>0 ? value.user.split(',') : [];
+            rule.source = value.source.length > 0 ? value.source.split(',') : [];
+            rule.user = value.user.length > 0 ? value.user.split(',') : [];
             rule.inboundTag = value.inboundTag;
             rule.protocol = value.protocol;
             rule.attrs = Object.fromEntries(value.attrs);
@@ -235,11 +254,11 @@
 
             for (const [key, value] of Object.entries(rule)) {
                 if (
-                value !== null &&
-                value !== undefined &&
-                !(Array.isArray(value) && value.length === 0) &&
-                !(typeof value === 'object' && Object.keys(value).length === 0) &&
-                value !== ''
+                    value !== null &&
+                    value !== undefined &&
+                    !(Array.isArray(value) && value.length === 0) &&
+                    !(typeof value === 'object' && Object.keys(value).length === 0) &&
+                    value !== ''
                 ) {
                     newRule[key] = value;
                 }

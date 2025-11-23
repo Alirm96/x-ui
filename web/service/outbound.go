@@ -301,7 +301,15 @@ func (s *OutboundService) parseVmessLink(link string) (*model.Outbound, error) {
 		"network":  getString(vmessData, "net"),
 		"security": getString(vmessData, "tls"),
 	}
-	
+
+	// Add mark if present
+	if mark, ok := vmessData["mark"]; ok {
+		// Place mark under sockopt
+		streamSettings["sockopt"] = map[string]interface{}{
+			"mark": mark,
+		}
+	}
+
 	if net := getString(vmessData, "net"); net == "ws" {
 		streamSettings["wsSettings"] = map[string]interface{}{
 			"path": getString(vmessData, "path"),
@@ -324,13 +332,13 @@ func (s *OutboundService) parseVmessLink(link string) (*model.Outbound, error) {
 			}
 		}
 	}
-	
+
 	if getString(vmessData, "tls") == "tls" {
 		streamSettings["tlsSettings"] = map[string]interface{}{
 			"serverName": getString(vmessData, "sni"),
 		}
 	}
-	
+
 	streamJSON, _ := json.Marshal(streamSettings)
 	outbound.StreamSettings = string(streamJSON)
 	
